@@ -359,8 +359,14 @@ NewItemRouter(env, timeout, db, protectedRouter)
 
 ## 6. Testing, Mocking, and Verification Patterns
 
-### 6.1 Mock Generation with Mockery
-Never hand-write mocks. Generate mocks for all domain interfaces using `mockery`:
+### 6.1 Testing Strategy: Integration Tests First & Minimal Mocking
+In strict adherence to [AGENTS.md](file:///mnt/Projects/android-browser-stream/AGENTS.md):
+- **Integration tests first**: Test real behavior with real dependencies (e.g. ephemeral MongoDB or containerized instances) for data access and HTTP workflows.
+- **Minimal mocking**: Use mocks selectively—primarily when isolating complex domain business workflows from external network or third-party boundaries.
+- **Test behavior, not implementation**: Focus assertions on state and domain results rather than brittle verification of internal call orders.
+
+### 6.2 Mock Generation with Mockery
+When unit testing pure use case logic in isolation, never hand-write mocks. Generate mocks for domain interfaces using `mockery`:
 
 ```bash
 # Generate mocks for domain interfaces
@@ -370,7 +376,7 @@ mockery --dir=domain --output=domain/mocks --outpkg=mocks --all
 mockery --dir=mongo --output=mongo/mocks --outpkg=mocks --all
 ```
 
-### 6.2 Unit Testing Use Cases (`usecase/*_test.go`)
+### 6.3 Unit Testing Use Cases (`usecase/*_test.go`)
 Test business logic in total isolation from the database driver:
 
 ```go
@@ -423,7 +429,7 @@ func TestFetchByUserID(t *testing.T) {
 }
 ```
 
-### 6.3 Unit Testing Controllers (`api/controller/*_test.go`)
+### 6.4 Unit Testing Controllers (`api/controller/*_test.go`)
 Use `httptest.ResponseRecorder` and mock usecases:
 
 ```go
