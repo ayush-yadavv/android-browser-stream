@@ -10,10 +10,8 @@ import (
 )
 
 // Setup registers global middleware, base probes, and domain routers.
-func Setup(env *bootstrap.Env, router *gin.Engine, sessionUsecase domain.SessionUsecase) {
+func Setup(env *bootstrap.Env, router *gin.Engine, sessionUsecase domain.SessionUsecase, streamUsecase domain.StreamUsecase) {
 	router.Use(middleware.CORS())
-	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
 
 	api := router.Group("/api")
 	{
@@ -32,7 +30,7 @@ func Setup(env *bootstrap.Env, router *gin.Engine, sessionUsecase domain.Session
 		})
 
 		if sessionUsecase != nil {
-			NewSessionRouter(sessionUsecase, api)
+			NewSessionRouter(sessionUsecase, streamUsecase, api)
 		}
 	}
 }

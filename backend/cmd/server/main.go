@@ -15,6 +15,7 @@ import (
 	"github.com/user/android-browser-stream/backend/api/route"
 	"github.com/user/android-browser-stream/backend/bootstrap"
 	"github.com/user/android-browser-stream/backend/domain"
+	"github.com/user/android-browser-stream/backend/infrastructure/adb"
 	"github.com/user/android-browser-stream/backend/infrastructure/docker"
 	"github.com/user/android-browser-stream/backend/infrastructure/portpool"
 	"github.com/user/android-browser-stream/backend/repository"
@@ -37,6 +38,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Docker client initialization failed: %v", err)
 	}
+	if err := dockerClient.Ping(context.Background()); err != nil {
+		log.Printf("WARNING: Docker daemon ping failed: %v (is Docker running?)", err)
+	} else {
+		log.Println("Connected to Docker daemon successfully")
+	}
 
 	// 3. Initialize host port allocator
 	pool := portpool.New(env.ADBPortStart, env.MaxSessions)
@@ -56,9 +62,40 @@ func main() {
 		IdleTimeout:  5 * time.Minute,
 		BootTimeout:  45 * time.Second,
 	}
-	sessionUC := usecase.NewSessionUsecase(sessionRepo, dockerClient, pool, sessionCfg, env.ContextTimeout)
 
-	// 6. Background worker for stale session reclamation
+	// 6. Initialize ADB client & optional PrewarmedPool
+	adbClient := adb.NewClient()
+
+	var prewarmedPool *docker.PrewarmedPool
+	var sessionOpts []usecase.SessionOption
+	sessionOpts = append(sessionOpts, usecase.WithADBDisconnector(adbClient))
+
+	if env.PrewarmedPoolSize > 0 {
+		poolCfg := docker.PrewarmedPoolConfig{
+			PoolSize:      env.PrewarmedPoolSize,
+			BootTimeout:   sessionCfg.BootTimeout,
+			ScrcpyBinPath: env.ScrcpyBinPath,
+			ContainerConfig: domain.ContainerConfig{
+				Image:       env.RedroidImage,
+				Width:       1080,
+				Height:      1920,
+				DPI:         420,
+				FPS:         60,
+				GPUMode:     "guest",
+				MemoryLimit: 4 * 1024 * 1024 * 1024,
+				CPULimit:    2 * 1e9,
+			},
+		}
+		prewarmedPool = docker.NewPrewarmedPool(poolCfg, dockerClient, pool, adbClient)
+		prewarmedPool.Start(context.Background())
+		sessionOpts = append(sessionOpts, usecase.WithPrewarmedPool(prewarmedPool))
+		log.Printf("Pre-warmed container pool enabled (size: %d, Option B: scrcpy pre-pushed)", env.PrewarmedPoolSize)
+	}
+
+	sessionUC := usecase.NewSessionUsecase(sessionRepo, dockerClient, pool, sessionCfg, env.ContextTimeout, sessionOpts...)
+	streamUC := usecase.NewStreamUsecase(adbClient, sessionRepo, env.ScrcpyBinPath, usecase.WithContainerRepo(dockerClient))
+
+	// 7. Background worker for stale session reclamation
 	tickerStop := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(time.Minute)
@@ -75,9 +112,9 @@ func main() {
 		}
 	}()
 
-	// 7. Route setup & Gin engine
+	// 8. Route setup & Gin engine
 	router := gin.Default()
-	route.Setup(env, router, sessionUC)
+	route.Setup(env, router, sessionUC, streamUC)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", env.ServerPort),
@@ -112,6 +149,11 @@ func main() {
 				_ = sessionUC.DestroySession(shutdownCtx, s.ID)
 			}
 		}
+	}
+
+	if prewarmedPool != nil {
+		log.Println("Stopping pre-warmed container pool...")
+		prewarmedPool.Stop()
 	}
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {

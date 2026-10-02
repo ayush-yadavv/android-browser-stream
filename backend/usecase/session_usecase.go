@@ -28,12 +28,36 @@ type SessionConfig struct {
 	BootTimeout  time.Duration
 }
 
+// ADBDisconnector defines contract to terminate ADB connection for a device.
+type ADBDisconnector interface {
+	Disconnect(ctx context.Context, serial string) error
+}
+
 type sessionUsecase struct {
 	sessionRepo   domain.SessionRepository
 	containerRepo domain.ContainerRepository
 	portPool      PortPool
 	config        SessionConfig
 	timeout       time.Duration
+	adb           ADBDisconnector
+	prewarmedPool domain.PrewarmedPool
+}
+
+// SessionOption configures optional sessionUsecase behavior.
+type SessionOption func(*sessionUsecase)
+
+// WithADBDisconnector injects an ADB disconnector for teardown.
+func WithADBDisconnector(adb ADBDisconnector) SessionOption {
+	return func(u *sessionUsecase) {
+		u.adb = adb
+	}
+}
+
+// WithPrewarmedPool injects a PrewarmedPool for sub-500ms session starts.
+func WithPrewarmedPool(pool domain.PrewarmedPool) SessionOption {
+	return func(u *sessionUsecase) {
+		u.prewarmedPool = pool
+	}
 }
 
 // NewSessionUsecase constructs a SessionUsecase implementation.
@@ -43,14 +67,19 @@ func NewSessionUsecase(
 	pp PortPool,
 	cfg SessionConfig,
 	timeout time.Duration,
+	opts ...SessionOption,
 ) domain.SessionUsecase {
-	return &sessionUsecase{
+	u := &sessionUsecase{
 		sessionRepo:   sr,
 		containerRepo: cr,
 		portPool:      pp,
 		config:        cfg,
 		timeout:       timeout,
 	}
+	for _, opt := range opts {
+		opt(u)
+	}
+	return u
 }
 
 func (u *sessionUsecase) CreateSession(ctx context.Context) (*domain.Session, error) {
@@ -79,13 +108,38 @@ func (u *sessionUsecase) CreateSession(ctx context.Context) (*domain.Session, er
 		return nil, domain.ErrSessionLimit
 	}
 
-	// 2. Allocate distinct ADB port
+	now := time.Now().UTC()
+
+	// 2. Try acquiring an already-booted container from the prewarmed pool (< 5ms)
+	if u.prewarmedPool != nil {
+		warm, err := u.prewarmedPool.Acquire(ctx)
+		if err == nil && warm != nil {
+			session := &domain.Session{
+				ID:           uuid.New().String(),
+				ContainerID:  warm.ContainerID,
+				ADBPort:      warm.ADBPort,
+				Status:       domain.SessionStatusReady,
+				DeviceWidth:  u.config.DeviceWidth,
+				DeviceHeight: u.config.DeviceHeight,
+				CreatedAt:    now,
+				LastActiveAt: now,
+			}
+			if err := u.sessionRepo.Create(ctx, session); err != nil {
+				_ = u.containerRepo.Stop(ctx, warm.ContainerID)
+				_ = u.containerRepo.Remove(ctx, warm.ContainerID)
+				u.portPool.Release(warm.ADBPort)
+				return nil, fmt.Errorf("create prewarmed session record: %w", err)
+			}
+			return u.sessionRepo.GetByID(ctx, session.ID)
+		}
+	}
+
+	// 3. Fallback to normal on-demand container provisioning
 	port, err := u.portPool.Acquire()
 	if err != nil {
 		return nil, err
 	}
 
-	now := time.Now().UTC()
 	session := &domain.Session{
 		ID:           uuid.New().String(),
 		ADBPort:      port,
@@ -180,6 +234,9 @@ func (u *sessionUsecase) DestroySession(ctx context.Context, id string) error {
 	}
 
 	if session.ADBPort != 0 {
+		if u.adb != nil {
+			_ = u.adb.Disconnect(ctx, fmt.Sprintf("127.0.0.1:%d", session.ADBPort))
+		}
 		u.portPool.Release(session.ADBPort)
 	}
 

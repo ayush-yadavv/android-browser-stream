@@ -242,3 +242,116 @@ func TestSessionUsecase_CleanupStaleSessions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, domain.SessionStatusTerminated, persisted.Status)
 }
+
+type fakePrewarmedPool struct {
+	mu        sync.Mutex
+	container *domain.PrewarmedContainer
+	acquireN  int
+}
+
+func (f *fakePrewarmedPool) Acquire(ctx context.Context) (*domain.PrewarmedContainer, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.acquireN++
+	res := f.container
+	f.container = nil
+	return res, nil
+}
+
+func (f *fakePrewarmedPool) Start(ctx context.Context) {}
+func (f *fakePrewarmedPool) Stop()                     {}
+func (f *fakePrewarmedPool) Count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.container != nil {
+		return 1
+	}
+	return 0
+}
+
+func TestSessionUsecase_CreateSession_UsesPrewarmedPool(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	sessionRepo := repository.NewSQLiteSessionRepository(db)
+	err = sessionRepo.Migrate(context.Background())
+	require.NoError(t, err)
+
+	fakeDocker := NewFakeContainerRepository()
+	pool := portpool.New(5555, 3)
+
+	cfg := usecase.SessionConfig{
+		Image:        "redroid/redroid:13.0.0-latest",
+		MaxSessions:  3,
+		DeviceWidth:  1080,
+		DeviceHeight: 1920,
+		IdleTimeout:  5 * time.Minute,
+	}
+
+	prewarmedMock := &fakePrewarmedPool{
+		container: &domain.PrewarmedContainer{
+			ContainerID:  "c-prewarmed-999",
+			ADBPort:      5555,
+			ScrcpyPushed: true,
+			CreatedAt:    time.Now().UTC(),
+		},
+	}
+
+	uc := usecase.NewSessionUsecase(sessionRepo, fakeDocker, pool, cfg, 5*time.Second,
+		usecase.WithPrewarmedPool(prewarmedMock),
+	)
+
+	ctx := context.Background()
+	session, err := uc.CreateSession(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, session)
+
+	assert.Equal(t, "c-prewarmed-999", session.ContainerID)
+	assert.Equal(t, 5555, session.ADBPort)
+	assert.Equal(t, domain.SessionStatusReady, session.Status)
+	// On-demand container creation should NOT have been invoked!
+	assert.Equal(t, 0, fakeDocker.createCalls)
+	assert.Equal(t, 1, prewarmedMock.acquireN)
+}
+
+func TestSessionUsecase_CreateSession_FallsBackWhenPrewarmedPoolEmpty(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	sessionRepo := repository.NewSQLiteSessionRepository(db)
+	err = sessionRepo.Migrate(context.Background())
+	require.NoError(t, err)
+
+	fakeDocker := NewFakeContainerRepository()
+	pool := portpool.New(5555, 3)
+
+	cfg := usecase.SessionConfig{
+		Image:        "redroid/redroid:13.0.0-latest",
+		MaxSessions:  3,
+		DeviceWidth:  1080,
+		DeviceHeight: 1920,
+		IdleTimeout:  5 * time.Minute,
+	}
+
+	prewarmedMock := &fakePrewarmedPool{
+		container: nil, // empty pool
+	}
+
+	uc := usecase.NewSessionUsecase(sessionRepo, fakeDocker, pool, cfg, 5*time.Second,
+		usecase.WithPrewarmedPool(prewarmedMock),
+	)
+
+	ctx := context.Background()
+	session, err := uc.CreateSession(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, session)
+
+	assert.Equal(t, "c-mock-123", session.ContainerID)
+	assert.Equal(t, 5555, session.ADBPort)
+	assert.Equal(t, domain.SessionStatusReady, session.Status)
+	// On-demand container creation SHOULD have been invoked as fallback!
+	assert.Equal(t, 1, fakeDocker.createCalls)
+	assert.Equal(t, 1, prewarmedMock.acquireN)
+}

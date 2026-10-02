@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 // SessionStatus tracks lifecycle states of an ephemeral streaming instance.
@@ -55,4 +57,25 @@ type SessionUsecase interface {
 	ListSessions(ctx context.Context) ([]*Session, error)
 	DestroySession(ctx context.Context, id string) error
 	CleanupStaleSessions(ctx context.Context, idleThreshold time.Duration) error
+}
+
+// StreamUsecase coordinates device streaming relay to a WebSocket connection.
+type StreamUsecase interface {
+	RelaySession(ctx context.Context, session *Session, ws *websocket.Conn) error
+}
+
+// PrewarmedContainer represents an initialized standby Android instance.
+type PrewarmedContainer struct {
+	ContainerID  string
+	ADBPort      int
+	ScrcpyPushed bool
+	CreatedAt    time.Time
+}
+
+// PrewarmedPool defines contract for managing pre-booted Android standby instances.
+type PrewarmedPool interface {
+	Acquire(ctx context.Context) (*PrewarmedContainer, error)
+	Start(ctx context.Context)
+	Stop()
+	Count() int
 }

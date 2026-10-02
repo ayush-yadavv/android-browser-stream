@@ -15,7 +15,7 @@ func TestHealthEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	env := bootstrap.NewEnv()
 	r := gin.New()
-	route.Setup(env, r, nil)
+	route.Setup(env, r, nil, nil)
 
 	req, err := http.NewRequest(http.MethodGet, "/api/health", nil)
 	assert.NoError(t, err)
@@ -32,7 +32,7 @@ func TestPingEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	env := bootstrap.NewEnv()
 	r := gin.New()
-	route.Setup(env, r, nil)
+	route.Setup(env, r, nil, nil)
 
 	req, err := http.NewRequest(http.MethodGet, "/api/ping", nil)
 	assert.NoError(t, err)

@@ -16,25 +16,25 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const checkHealth = async () => {
-    setLoading(true);
-    setError(null);
+  const checkHealth = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
       const res = await fetch('/api/health');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: HealthResponse = await res.json();
       setHealth(data);
+      setError(null);
     } catch (err: any) {
       setError(err.message || 'Offline');
       setHealth(null);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
   useEffect(() => {
-    checkHealth();
-    const interval = setInterval(checkHealth, 15000);
+    checkHealth(true);
+    const interval = setInterval(() => checkHealth(false), 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -71,7 +71,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 : `Backend ${error || 'Offline'}`}
             </span>
             <button
-              onClick={checkHealth}
+              onClick={() => checkHealth(false)}
               title="Refresh Health"
               className="text-ink-muted hover:text-ink transition-colors ml-1"
             >

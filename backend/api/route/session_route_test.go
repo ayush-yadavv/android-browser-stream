@@ -61,7 +61,7 @@ func TestSessionRouteIntegration(t *testing.T) {
 	sessionUC := usecase.NewSessionUsecase(sessionRepo, &FakeContainerOrchestrator{}, pool, cfg, 5*time.Second)
 
 	r := gin.New()
-	route.Setup(env, r, sessionUC)
+	route.Setup(env, r, sessionUC, nil)
 
 	// 1. POST /api/sessions
 	w := httptest.NewRecorder()

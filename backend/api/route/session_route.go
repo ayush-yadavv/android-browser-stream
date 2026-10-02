@@ -6,14 +6,23 @@ import (
 	"github.com/user/android-browser-stream/backend/domain"
 )
 
-// NewSessionRouter registers session REST endpoints onto the given router group.
-func NewSessionRouter(usecase domain.SessionUsecase, group *gin.RouterGroup) {
-	ctrl := controller.NewSessionController(usecase)
+// NewSessionRouter registers session REST and WebSocket endpoints onto the given router group.
+func NewSessionRouter(sessionUC domain.SessionUsecase, streamUC domain.StreamUsecase, group *gin.RouterGroup) {
+	sessionCtrl := controller.NewSessionController(sessionUC)
+	var streamCtrl *controller.StreamController
+	if streamUC != nil {
+		streamCtrl = controller.NewStreamController(sessionUC, streamUC)
+	}
+
 	sessions := group.Group("/sessions")
 	{
-		sessions.POST("", ctrl.Create)
-		sessions.GET("", ctrl.List)
-		sessions.GET("/:id", ctrl.Get)
-		sessions.DELETE("/:id", ctrl.Delete)
+		sessions.POST("", sessionCtrl.Create)
+		sessions.GET("", sessionCtrl.List)
+		sessions.GET("/:id", sessionCtrl.Get)
+		sessions.DELETE("/:id", sessionCtrl.Delete)
+
+		if streamCtrl != nil {
+			sessions.GET("/:id/stream", streamCtrl.HandleStream)
+		}
 	}
 }

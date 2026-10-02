@@ -3,6 +3,8 @@ package docker
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -18,12 +20,38 @@ type Client struct {
 }
 
 // NewClient constructs an authenticated Docker SDK client from the host environment.
+// It automatically detects Docker Desktop or rootless Docker sockets if DOCKER_HOST is unset.
 func NewClient() (*Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	opts := []client.Opt{
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	}
+
+	if os.Getenv("DOCKER_HOST") == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); os.IsNotExist(err) {
+			homeDir, _ := os.UserHomeDir()
+			desktopSock := filepath.Join(homeDir, ".docker", "desktop", "docker.sock")
+			rootlessSock := filepath.Join(homeDir, ".docker", "run", "docker.sock")
+
+			if _, err := os.Stat(desktopSock); err == nil {
+				opts = append(opts, client.WithHost("unix://"+desktopSock))
+			} else if _, err := os.Stat(rootlessSock); err == nil {
+				opts = append(opts, client.WithHost("unix://"+rootlessSock))
+			}
+		}
+	}
+
+	cli, err := client.NewClientWithOpts(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("initialize docker client: %w", err)
 	}
 	return &Client{cli: cli}, nil
+}
+
+// Ping verifies connectivity to the Docker daemon.
+func (c *Client) Ping(ctx context.Context) error {
+	_, err := c.cli.Ping(ctx)
+	return err
 }
 
 // Create provisions and starts an ephemeral Redroid Android 13 container.
@@ -69,6 +97,9 @@ func (c *Client) Create(ctx context.Context, cfg domain.ContainerConfig) (string
 		containerName,
 	)
 	if err != nil {
+		if client.IsErrNotFound(err) {
+			return "", fmt.Errorf("docker image '%s' is not ready locally (download in progress, please retry once pull completes): %w", cfg.Image, err)
+		}
 		return "", fmt.Errorf("create container: %w", err)
 	}
 

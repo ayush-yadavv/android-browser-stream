@@ -14,8 +14,9 @@ type Env struct {
 	MaxSessions    int           `mapstructure:"MAX_SESSIONS"`
 	ADBPortStart   int           `mapstructure:"ADB_PORT_START"`
 	RedroidImage   string        `mapstructure:"REDROID_IMAGE"`
-	ScrcpyBinPath  string        `mapstructure:"SCRCPY_BIN_PATH"`
-	DBPath         string        `mapstructure:"DB_PATH"`
+	ScrcpyBinPath     string        `mapstructure:"SCRCPY_BIN_PATH"`
+	DBPath            string        `mapstructure:"DB_PATH"`
+	PrewarmedPoolSize int           `mapstructure:"PREWARMED_POOL_SIZE"`
 }
 
 // NewEnv initializes environment configuration with defaults and overrides.
@@ -28,6 +29,7 @@ func NewEnv() *Env {
 	viper.SetDefault("REDROID_IMAGE", "redroid/redroid:13.0.0-latest")
 	viper.SetDefault("SCRCPY_BIN_PATH", "bin/scrcpy-server")
 	viper.SetDefault("DB_PATH", "sessions.db")
+	viper.SetDefault("PREWARMED_POOL_SIZE", 0)
 
 	viper.AutomaticEnv()
 	if err := viper.Unmarshal(&env); err != nil {

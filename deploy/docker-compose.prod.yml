@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: aic-backend
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../backend/bin:/app/bin
+      - backend-data:/app/data
+    environment:
+      - SERVER_PORT=8080
+      - REDROID_IMAGE=redroid/redroid:13.0.0-latest
+      - ADB_PORT_START=5555
+      - MAX_SESSIONS=3
+      - SCRCPY_BIN_PATH=/app/bin/scrcpy-server
+      - DB_PATH=/app/data/sessions.db
+      - PREWARMED_POOL_SIZE=${PREWARMED_POOL_SIZE:-1}
+      - GIN_MODE=release
+    networks:
+      - aic-net
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: aic-proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../frontend/dist:/srv/frontend/dist:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    depends_on:
+      - backend
+    networks:
+      - aic-net
+
+volumes:
+  backend-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  aic-net:
+    driver: bridge
