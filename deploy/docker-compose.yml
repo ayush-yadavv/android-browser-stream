@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: android-browser-stream-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../backend/bin:/app/bin
+    environment:
+      - SERVER_PORT=8080
+      - REDROID_IMAGE=redroid/redroid:13.0.0-latest
+      - ADB_PORT_START=5555
+      - MAX_SESSIONS=3
+      - SCRCPY_BIN_PATH=/app/bin/scrcpy-server
+      - DB_PATH=/app/data/sessions.db

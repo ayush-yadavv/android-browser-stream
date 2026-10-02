@@ -1,0 +1,122 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/user/android-browser-stream/backend/api/route"
+	"github.com/user/android-browser-stream/backend/bootstrap"
+	"github.com/user/android-browser-stream/backend/domain"
+	"github.com/user/android-browser-stream/backend/infrastructure/docker"
+	"github.com/user/android-browser-stream/backend/infrastructure/portpool"
+	"github.com/user/android-browser-stream/backend/repository"
+	"github.com/user/android-browser-stream/backend/usecase"
+)
+
+func main() {
+	app := bootstrap.App()
+	env := app.Env
+
+	// 1. Initialize SQLite database & migrations
+	db, err := bootstrap.NewSQLiteDatabase(env)
+	if err != nil {
+		log.Fatalf("Database initialization failed: %v", err)
+	}
+	defer db.Close()
+
+	// 2. Initialize Docker container orchestrator
+	dockerClient, err := docker.NewClient()
+	if err != nil {
+		log.Fatalf("Docker client initialization failed: %v", err)
+	}
+
+	// 3. Initialize host port allocator
+	pool := portpool.New(env.ADBPortStart, env.MaxSessions)
+
+	// 4. Initialize session repository
+	sessionRepo := repository.NewSQLiteSessionRepository(db)
+
+	// 5. Initialize session usecase
+	sessionCfg := usecase.SessionConfig{
+		Image:        env.RedroidImage,
+		MaxSessions:  env.MaxSessions,
+		DeviceWidth:  1080,
+		DeviceHeight: 1920,
+		DeviceDPI:    420,
+		DeviceFPS:    60,
+		GPUMode:      "guest",
+		IdleTimeout:  5 * time.Minute,
+		BootTimeout:  45 * time.Second,
+	}
+	sessionUC := usecase.NewSessionUsecase(sessionRepo, dockerClient, pool, sessionCfg, env.ContextTimeout)
+
+	// 6. Background worker for stale session reclamation
+	tickerStop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				_ = sessionUC.CleanupStaleSessions(ctx, 5*time.Minute)
+				cancel()
+			case <-tickerStop:
+				return
+			}
+		}
+	}()
+
+	// 7. Route setup & Gin engine
+	router := gin.Default()
+	route.Setup(env, router, sessionUC)
+
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", env.ServerPort),
+		Handler: router,
+	}
+
+	// 8. Run server in background goroutine
+	go func() {
+		log.Printf("Server starting on %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Server failed to run: %v", err)
+		}
+	}()
+
+	// 9. Trap OS signals for graceful shutdown & container cleanup
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	sig := <-quit
+	log.Printf("Received signal %s, initiating graceful shutdown...", sig)
+
+	close(tickerStop)
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Clean up all active containers before exit to prevent orphaned processes
+	activeSessions, err := sessionRepo.List(shutdownCtx)
+	if err == nil {
+		for _, s := range activeSessions {
+			if s.Status != domain.SessionStatusTerminated {
+				log.Printf("Cleaning up active container for session %s...", s.ID)
+				_ = sessionUC.DestroySession(shutdownCtx, s.ID)
+			}
+		}
+	}
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server gracefully stopped.")
+}
