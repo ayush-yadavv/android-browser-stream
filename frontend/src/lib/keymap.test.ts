@@ -43,6 +43,16 @@ describe('keymap', () => {
       expect(mapBrowserCodeToAndroidKeycode('MetaRight')).toBe(ANDROID_KEYCODES.KEYCODE_META_RIGHT);
     });
 
+    it('maps function and numpad keys correctly', () => {
+      expect(mapBrowserCodeToAndroidKeycode('Insert')).toBe(ANDROID_KEYCODES.KEYCODE_INSERT);
+      expect(mapBrowserCodeToAndroidKeycode('ContextMenu')).toBe(ANDROID_KEYCODES.KEYCODE_MENU);
+      expect(mapBrowserCodeToAndroidKeycode('F1')).toBe(ANDROID_KEYCODES.KEYCODE_F1);
+      expect(mapBrowserCodeToAndroidKeycode('F12')).toBe(ANDROID_KEYCODES.KEYCODE_F12);
+      expect(mapBrowserCodeToAndroidKeycode('Numpad0')).toBe(ANDROID_KEYCODES.KEYCODE_NUMPAD_0);
+      expect(mapBrowserCodeToAndroidKeycode('NumpadAdd')).toBe(ANDROID_KEYCODES.KEYCODE_NUMPAD_ADD);
+      expect(mapBrowserCodeToAndroidKeycode('Quote')).toBe(ANDROID_KEYCODES.KEYCODE_APOSTROPHE);
+    });
+
     it('returns null for unrecognized keys', () => {
       expect(mapBrowserCodeToAndroidKeycode('F15')).toBeNull();
       expect(mapBrowserCodeToAndroidKeycode('')).toBeNull();

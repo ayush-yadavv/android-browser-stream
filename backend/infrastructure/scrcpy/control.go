@@ -85,3 +85,22 @@ func WriteTextEvent(w io.Writer, text string) error {
 	_, err := w.Write(buf)
 	return err
 }
+
+// WriteSetClipboard writes a SET_CLIPBOARD message (14 + N bytes) to the target writer.
+func WriteSetClipboard(w io.Writer, sequence uint64, paste bool, text string) error {
+	textBytes := []byte(text)
+	buf := make([]byte, 14+len(textBytes))
+	buf[0] = MsgTypeSetClipboard
+	binary.BigEndian.PutUint64(buf[1:9], sequence)
+	if paste {
+		buf[9] = 1
+	} else {
+		buf[9] = 0
+	}
+	binary.BigEndian.PutUint32(buf[10:14], uint32(len(textBytes)))
+	copy(buf[14:], textBytes)
+
+	_, err := w.Write(buf)
+	return err
+}
+

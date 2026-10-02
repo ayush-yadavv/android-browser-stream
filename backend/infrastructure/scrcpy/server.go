@@ -66,7 +66,7 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 		"audio=false",
 		"control=true",
 		"video_codec=h264",
-		"max_size=1080",
+		"max_size=0",
 		"max_fps=60",
 		"video_bit_rate=8000000",
 		"send_device_meta=false",

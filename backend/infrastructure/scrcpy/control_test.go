@@ -76,3 +76,22 @@ func TestBuildTextPayload_Layout(t *testing.T) {
 	assert.Equal(t, uint32(len(text)), binary.BigEndian.Uint32(data[1:5]))
 	assert.Equal(t, text, string(data[5:]))
 }
+
+func TestBuildSetClipboardPayload_Layout(t *testing.T) {
+	buf := new(bytes.Buffer)
+	text := "clipboard text 🚀"
+	seq := uint64(42)
+	err := scrcpy.WriteSetClipboard(buf, seq, true, text)
+	require.NoError(t, err)
+
+	data := buf.Bytes()
+	expectedLen := 14 + len([]byte(text))
+	assert.Len(t, data, expectedLen, "SetClipboard payload must be exactly 14 + N bytes")
+
+	assert.Equal(t, byte(scrcpy.MsgTypeSetClipboard), data[0])
+	assert.Equal(t, seq, binary.BigEndian.Uint64(data[1:9]))
+	assert.Equal(t, byte(1), data[9]) // paste = true
+	assert.Equal(t, uint32(len([]byte(text))), binary.BigEndian.Uint32(data[10:14]))
+	assert.Equal(t, text, string(data[14:]))
+}
+

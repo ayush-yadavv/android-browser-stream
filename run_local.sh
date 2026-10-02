@@ -59,32 +59,36 @@ if command -v docker >/dev/null 2>&1; then
         fi
     fi
 
-    # Auto-fix permissions on /var/run/docker.sock if needed
+    # Auto-fix permissions on /var/run/docker.sock if non-interactive sudo is available
     if [ -S "/var/run/docker.sock" ] && ! docker -H "unix:///var/run/docker.sock" info >/dev/null 2>&1; then
-        log_info "Configuring permissions on /var/run/docker.sock..."
-        sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+        if sudo -n true 2>/dev/null; then
+            log_info "Configuring permissions on /var/run/docker.sock..."
+            sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+        fi
     fi
 
-    # Check for Android Binder IPC module on the host and auto-link/mount if possible
+    # Check for Android Binder IPC module on host (auto-link if non-interactive sudo available)
     if [ ! -e /dev/binder ] || [ ! -e /dev/hwbinder ] || [ ! -e /dev/vndbinder ]; then
-        if [ -d /dev/binderfs ]; then
-            log_info "Creating Android binder device symlinks from /dev/binderfs..."
-            sudo chmod 755 /dev/binderfs 2>/dev/null || true
-            for dev in binder hwbinder vndbinder; do
-                if [ -e "/dev/binderfs/${dev}" ]; then
+        if sudo -n true 2>/dev/null; then
+            if [ -d /dev/binderfs ]; then
+                log_info "Creating Android binder device symlinks from /dev/binderfs..."
+                sudo chmod 755 /dev/binderfs 2>/dev/null || true
+                for dev in binder hwbinder vndbinder; do
+                    if [ -e "/dev/binderfs/${dev}" ]; then
+                        sudo ln -sf "/dev/binderfs/${dev}" "/dev/${dev}" 2>/dev/null || true
+                        sudo chmod 666 "/dev/binderfs/${dev}" "/dev/${dev}" 2>/dev/null || true
+                    fi
+                done
+            elif grep -q binder /proc/filesystems; then
+                log_info "Mounting Android binderfs on /dev/binderfs..."
+                sudo mkdir -p /dev/binderfs 2>/dev/null || true
+                sudo mount -t binder binder /dev/binderfs 2>/dev/null || true
+                sudo chmod 755 /dev/binderfs 2>/dev/null || true
+                for dev in binder hwbinder vndbinder; do
                     sudo ln -sf "/dev/binderfs/${dev}" "/dev/${dev}" 2>/dev/null || true
                     sudo chmod 666 "/dev/binderfs/${dev}" "/dev/${dev}" 2>/dev/null || true
-                fi
-            done
-        elif grep -q binder /proc/filesystems; then
-            log_info "Mounting Android binderfs on /dev/binderfs..."
-            sudo mkdir -p /dev/binderfs 2>/dev/null || true
-            sudo mount -t binder binder /dev/binderfs 2>/dev/null || true
-            sudo chmod 755 /dev/binderfs 2>/dev/null || true
-            for dev in binder hwbinder vndbinder; do
-                sudo ln -sf "/dev/binderfs/${dev}" "/dev/${dev}" 2>/dev/null || true
-                sudo chmod 666 "/dev/binderfs/${dev}" "/dev/${dev}" 2>/dev/null || true
-            done
+                done
+            fi
         fi
     fi
 

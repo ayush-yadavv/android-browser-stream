@@ -16,6 +16,8 @@ import {
   Send,
   Keyboard,
   Activity,
+  Power,
+  Clipboard,
 } from 'lucide-react';
 
 interface DeviceCanvasProps {
@@ -73,13 +75,25 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
     sendAppSwitch,
     sendVolumeUp,
     sendVolumeDown,
+    sendPower,
     sendText,
+    sendClipboard,
+    isFocused,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerCancel,
+    handleKeyDown,
+    handleKeyUp,
+    handleContextMenu,
+    handleFocus,
+    handleBlur,
   } = useInputCapture({
     canvasRef,
     sendControl,
     deviceWidth: 1080,
     deviceHeight: 1920,
-    enabled: isConnected && hasFirstFrame,
+    enabled: isConnected,
   });
 
   useEffect(() => {
@@ -100,6 +114,27 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
     if (!inputText.trim()) return;
     sendText(inputText);
     setInputText('');
+  };
+
+  const handlePasteClipboard = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          sendClipboard(text, true);
+        }
+      } else {
+        const text = prompt('Enter text to paste into Android:');
+        if (text) {
+          sendClipboard(text, true);
+        }
+      }
+    } catch {
+      const text = prompt('Enter text to paste into Android:');
+      if (text) {
+        sendClipboard(text, true);
+      }
+    }
   };
 
   return (
@@ -133,23 +168,37 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
           </div>
 
           <div className="flex items-center space-x-4">
-            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-ink-muted">
-              <Keyboard className="w-3 h-3 text-neutral-400" /> Click to type
+            <span className={`hidden sm:inline-flex items-center gap-1 text-[11px] transition-colors ${
+              isFocused ? 'text-accent-blue font-medium' : 'text-ink-muted'
+            }`}>
+              <Keyboard className={`w-3 h-3 ${isFocused ? 'text-accent-blue' : 'text-neutral-400'}`} />
+              {isFocused ? 'Keyboard active' : 'Click to type'}
             </span>
             <span className="font-mono text-[11px] text-ink-muted">1080 × 1920</span>
           </div>
         </div>
 
         {/* Main Viewport Container */}
-        <div className="relative rounded-2xl bg-black border border-hairline overflow-hidden shadow-2xl flex flex-col items-center justify-center max-h-[78vh] aspect-[9/16] w-full">
+        <div className={`relative rounded-2xl bg-black overflow-hidden shadow-2xl flex flex-col items-center justify-center max-h-[78vh] aspect-[9/16] w-full transition-all duration-200 ${
+          isFocused ? 'ring-2 ring-accent-blue/50 border border-accent-blue' : 'border border-hairline'
+        }`}>
           <canvas
             ref={canvasRef}
             width={1080}
             height={1920}
-            className={`w-full h-full object-contain cursor-crosshair transition-opacity duration-300 outline-none select-none ${
+            className={`w-full h-full object-contain cursor-crosshair transition-opacity duration-300 outline-none select-none touch-none ${
               hasFirstFrame ? 'opacity-100' : 'opacity-0'
             }`}
             tabIndex={0}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            onContextMenu={handleContextMenu}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
             onClick={() => canvasRef.current?.focus()}
           />
 
@@ -230,10 +279,18 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
               </button>
             </div>
 
-            <div className="w-16" /> {/* spacer for symmetry */}
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={sendPower}
+                title="Power / Lock Screen"
+                className="p-2 rounded-lg hover:bg-surface-2 text-ink-muted hover:text-red-400 transition-colors"
+              >
+                <Power className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Text Injection / Clipboard Bar */}
+          {/* Text Injection & Host Clipboard Sync Bar */}
           <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
             <input
               type="text"
@@ -242,6 +299,15 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
               placeholder="Paste or type text to inject directly into Android..."
               className="flex-1 px-4 py-2 rounded-xl bg-surface-1 border border-hairline text-xs text-ink placeholder:text-neutral-500 focus:outline-none focus:border-accent-blue transition-colors"
             />
+            <button
+              type="button"
+              onClick={handlePasteClipboard}
+              title="Paste from Host Clipboard (Ctrl+V)"
+              className="px-3 py-2 rounded-xl bg-surface-1 border border-hairline hover:bg-surface-2 text-ink text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Clipboard className="w-3.5 h-3.5 text-accent-blue" />
+              <span className="hidden sm:inline">Paste</span>
+            </button>
             <button
               type="submit"
               disabled={!inputText.trim()}

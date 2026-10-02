@@ -744,3 +744,247 @@
   - None.
 - **User Decision / Next Step:**
   - Process log refactored and ready for evaluation.
+
+---
+
+### Entry 33
+- **Timestamp:** 2026-10-02T16:47:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Generate a comprehensive implementation plan for Phase 4 (Input Forwarding): multi-touch pointer tracking, standard scrcpy mouse shortcuts, keyboard events, host clipboard synchronization, and virtual system navigation controls.
+  ```
+- **Response & Actions Taken (Phase 4 Planning Mode):**
+  1. Researched requirements for Phase 4 (Input Forwarding) against PRD, assignments, and scrcpy v2.7 binary protocol specifications.
+  2. Evaluated existing codebase (`backend/infrastructure/scrcpy/control.go`, `frontend/src/lib/control.ts`, `keymap.ts`, `useInputCapture.ts`, `DeviceCanvas.tsx`) to identify functional gaps and hardening opportunities:
+     - Missing clipboard synchronization (`SET_CLIPBOARD` opcode `0x09`) in both Go backend and TypeScript frontend.
+     - Multi-touch pointer tracking: mapping `e.pointerId` to scrcpy `pointerId` (int64).
+     - Standard scrcpy mouse bindings: Right-click mapping to Android Back, Middle-click to Android Home.
+     - Wheel scrolling normalization and int16 big-endian clamping.
+     - Virtual system toolbar: adding Power button (`KEYCODE_POWER`) and 1-click clipboard paste.
+     - Active canvas focus ring and browser hotkey suppression when canvas is active.
+  3. Created detailed implementation plan artifact `phase-4-input-forwarding-plan.md` with sequence diagram, component diffs, test strategy, and verification checklist.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Approved Phase 4 implementation plan.
+
+---
+
+### Entry 34
+- **Timestamp:** 2026-10-02T16:51:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Approved Phase 4 implementation plan. Execute TDD implementation cycles for input forwarding across scrcpy control protocol, keymap serialization, multi-touch tracking, clipboard sync, and virtual toolbar components.
+  ```
+- **Response & Actions Taken (Phase 4 TDD Execution):**
+  1. **Backend Infrastructure (`backend/infrastructure/scrcpy`)**:
+     - RED: Added unit test `TestBuildSetClipboardPayload_Layout` in `control_test.go` verifying 14 + N byte scrcpy v2.7 serialization with sequence, paste flag, text length, and UTF-8 bytes.
+     - GREEN: Implemented `WriteSetClipboard` in `control.go`. All 5 control unit tests passed under `go test -race`.
+  2. **Frontend Control Library (`frontend/src/lib`)**:
+     - RED: Added unit test in `control.test.ts` for `buildSetClipboardEvent`.
+     - GREEN: Implemented `SetClipboardParams` and `buildSetClipboardEvent` in `control.ts`.
+     - Extended `keymap.ts` with complete mappings for `Insert`, `ContextMenu`, `F1`–`F12`, and `Numpad` arithmetic keys.
+     - Extended `keymap.test.ts` to assert all newly mapped keys. All 7 tests passed.
+  3. **Frontend Input Capture Hook (`frontend/src/hooks`)**:
+     - Updated `useInputCapture.ts`:
+       - Multi-touch pointer tracking: maps `e.pointerId` to scrcpy `pointerId` (int64) for multi-touch/pen devices.
+       - Standard scrcpy mouse shortcuts: Right-Click triggers Android Back (`KEYCODE_BACK`) and suppresses browser context menu; Middle-Click triggers Android Home (`KEYCODE_HOME`).
+       - Host clipboard synchronization: added `sendClipboard` and keyboard shortcut `Ctrl+V` / `Cmd+V` clipboard paste.
+       - Power toggle: added `sendPower` (`KEYCODE_POWER`).
+       - Canvas focus tracking: added `isFocused` state driven by `focus` and `blur` events.
+     - Extended `useInputCapture.test.ts` with invalid rect handling and sub-pixel rounding tests. All 4 tests passed.
+  4. **UI Viewport & Toolbar (`frontend/src/components/DeviceCanvas.tsx`)**:
+     - Added Power button to virtual navigation toolbar for locking/waking the screen.
+     - Added 1-click "Paste" clipboard button in the text input bar.
+     - Added focus ring indicator (`ring-2 ring-accent-blue/50`) and status bar indicator when canvas has keyboard focus.
+  5. **Verification**:
+     - Go backend: All 18 test suites passed cleanly with race detection (`go test -count=1 -race ./...`).
+     - Frontend Vitest: All 27 tests passed across 6 test suites (`npm test`).
+     - Frontend Build: Clean production compilation with 0 TypeScript errors (`npm run build`).
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Diagnosed touch event size mismatch warning from live scrcpy server.
+
+---
+
+### Entry 35
+- **Timestamp:** 2026-10-02T17:03:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Investigate scrcpy touch event rejection warning: [WARN: Ignore touch event, it was generated for a different device size]. Diagnose aspect ratio downscaling and dynamic canvas coordinate alignment.
+  ```
+- **Response & Actions Taken (Root Cause Analysis & Fix):**
+  1. **Log Analysis & Confirmation**:
+     - Live video stream connection established successfully (`Device: redroid13_x86_64`, `Using video encoder: OMX.google.h264.encoder`).
+     - Phase 4 clipboard synchronization confirmed functional on live device (`Device clipboard set`).
+  2. **Root Cause Analysis (`Ignore touch event, it was generated for a different device size`)**:
+     - In `backend/infrastructure/scrcpy/server.go`, scrcpy-server was launched with `max_size=1080`.
+     - In `scrcpy`, `max_size` caps the *larger* screen dimension (height in portrait orientation). Because Redroid is 1080×1920, scrcpy downscaled the video height to 1080 and aspect-ratio scaled the width to 608 (`608×1080`).
+     - The frontend `useInputCapture` hook was sending hardcoded `screenW=1080, screenH=1920`.
+     - In scrcpy server's `Controller.java`, incoming touch coordinates are validated with `if (!msg.getScreenSize().equals(deviceSize))`. Because (1080, 1920) did not match scrcpy's active internal video size (608, 1080), scrcpy ignored touch events to prevent coordinate misclicks.
+  3. **Permanent Dual Fix**:
+     - **Backend (`backend/infrastructure/scrcpy/server.go`)**: Changed `max_size=1080` to `max_size=0`. In scrcpy, `0` disables resolution scaling, ensuring the device streams at native 1080×1920 resolution.
+     - **Frontend (`frontend/src/hooks/useInputCapture.ts`)**: Replaced hardcoded dimensions with dynamic target resolution extraction (`canvas.width` and `canvas.height` dynamically populated by `useVideoDecoder` from incoming `VideoFrame` metadata). `screenW` and `screenH` now match the exact video resolution under all conditions.
+  4. **Verification**:
+     - Backend unit tests passed with race detector (`go test -v -count=1 -race ./...`).
+     - Frontend Vitest suite passed (`npm test`, 27/27 tests).
+     - Frontend production build passed cleanly (`npm run build`).
+- **Errors / Failures Encountered:**
+  - scrcpy `max_size` argument downscaling larger dimension causing touch coordinate dimension mismatch.
+- **User Decision / Next Step:**
+  - Proceed with viewport aspect ratio pillarboxing compensation and input touch guards.
+
+---
+
+### Entry 36
+- **Timestamp:** 2026-10-02T21:01:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Harden touch input capture across responsive canvas viewports: implement letterboxing/pillarboxing offset compensation, CSS touch-action guards, and visual touch feedback on Android.
+  ```
+- **Response & Actions Taken (Root Cause Analysis, Verification & Full Input Hardening):**
+  1. **Root Cause Analysis & Empirical Verification**:
+     - Verified scrcpy control protocol behavior on live Docker container: wrote a Go integration test (`test_e2e_touch.go`) sending scrcpy `INJECT_TOUCH_EVENT` (32 bytes) over abstract socket `5655`. Observed zero warning logs from scrcpy, and confirmed Android's `InputManager` accepted the touch events and opened the Gallery app.
+  2. **Viewport & Gesture Hardening**:
+     - **Letterboxing / Pillarboxing Compensation (`frontend/src/hooks/useInputCapture.ts`)**: Updated `calculateNormalizedCoordinates` to calculate exact `scale`, `renderedWidth`, `renderedHeight`, `offsetX`, and `offsetY` when CSS `object-contain` is active on the canvas, eliminating coordinate misalignments regardless of viewport aspect ratio or window resizing.
+     - **Gesture Interception Guard (`frontend/src/components/DeviceCanvas.tsx`)**: Added `touch-none` CSS class to `<canvas>` element to prevent mobile browsers, trackpads, and touchscreens from canceling touch gestures with `pointercancel` during swipes or taps.
+     - **Browser Drag Guard (`useInputCapture.ts`)**: Added `e.preventDefault()` to `pointerdown`, `pointermove`, and `pointerup` handlers.
+     - **Visual Feedback (`backend/usecase/stream_usecase.go`)**: Added automatic `settings put system show_touches 1` on Android container initialization so touch points are visually rendered on the screen.
+     - **Typed Array WebSockets (`frontend/src/hooks/useWebSocket.ts`)**: Updated `sendControl` to pass `Uint8Array` directly (`ws.send(framed)`) to prevent array buffer offset truncation.
+  3. **Verification**:
+     - Go backend: All 18 unit/integration test suites passed with race detection (`go test -count=1 -race ./...`).
+     - Frontend Vitest: All 28 unit tests passed across 6 test suites (`npm test`).
+     - Frontend Build: Clean compilation with 0 TypeScript errors (`npm run build`).
+- **Errors / Failures Encountered:**
+  - Running Go backend instance needed restart to pick up `max_size=0` changes from disk.
+- **User Decision / Next Step:**
+  - Review local execution script permissions and kernel module requirements.
+
+---
+
+### Entry 37
+- **Timestamp:** 2026-10-02T21:05:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  What are the exact host environment and kernel permissions required for local execution? Optimize run_local.sh to run without sudo privileges once initial system setup is completed.
+  ```
+- **Response & Actions Taken:**
+  1. **Explained System Rationale**:
+     - Clarified the two system requirements that traditionally require elevated privileges:
+       1. **Android Binder IPC Devices (`/dev/binder`, `/dev/hwbinder`, `/dev/vndbinder`)**: Redroid (Android-in-Cloud) is a full containerized Android OS. Android's IPC mechanism requires kernel-level binder devices mounted from `binderfs` (`mount -t binder binder /dev/binderfs`).
+       2. **Docker Engine Socket Permissions (`/var/run/docker.sock`)**: If the current user is not in the `docker` group, Docker socket permissions default to root.
+  2. **Script Hardening (`run_local.sh`)**:
+     - Updated `run_local.sh` to use non-interactive guards (`sudo -n true`).
+     - Once `sudo bash scripts/install-native-docker.sh` has been run once on a system (which loads binder kernel modules and adds the user to the `docker` group), `run_local.sh` runs completely **zero-sudo** with zero password prompts.
+  3. **Verification**:
+     - Tested `./run_local.sh` execution without root privileges. Verified server health probe passes and Vite dev server starts cleanly.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Inspect stream rendering and Android launcher wallpaper behavior.
+
+---
+
+### Entry 38
+- **Timestamp:** 2026-10-02T21:08:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Analyze potential root causes for black screen occurrences during Android stream initialization, including SurfaceFlinger keyframe emission, WebCodecs parameter sets, and PowerManager display states.
+  ```
+- **Response & Actions Taken:**
+  1. **Detailed Technical Root Causes for Black Screen in Android Streaming**:
+     - **SurfaceFlinger Keyframe Inertia**: H.264 video encoders only emit packets on dirty region updates. Static screens produce 0 frames until an input/wake event kicks SurfaceFlinger.
+     - **Missing SPS/PPS Parameter Sets**: WebCodecs requires SPS/PPS parameter sets before decoding IDR keyframes.
+     - **Android Lock / Sleep State**: PowerManager state defaulting to ASLEEP or Keyguard locking the display.
+     - **Missing Binder IPC Teardown**: Redroid crashing on startup if `/dev/binder` is unavailable.
+  2. **Highlighted System Guards**:
+     - Verified all our automatic mitigation routines (`input keyevent 82` wake kick, SPS/PPS parameter caching in `h264.ts`, `ro.setupwizard.mode=DISABLED`, native `binderfs` support) are active and verified.
+  3. **Launcher Wallpaper Clarification**:
+     - Clarified that seeing the status bar (top clock & battery), search bar, app icons, and navigation bar against a dark background is the native default minimalist wallpaper of Redroid 13. Launching apps (Settings or Gallery) renders full bright UI frames.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Resolve touch input event binding lifecycle and WebCodecs microtask race condition.
+
+---
+
+### Entry 39
+- **Timestamp:** 2026-10-02T21:18:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Investigate canvas input event listener attachment: React useRef element mutations do not trigger useEffect re-subscriptions. Refactor useInputCapture to use direct React JSX event prop bindings.
+  ```
+- **Response & Actions Taken (React Event Binding Resolution & Full Verification):**
+  1. **Root Cause Analysis (React Ref Mount Lifecycle)**:
+     - Identified that in `useInputCapture.ts`, event listeners were attached inside a `useEffect` watching `[canvasRef, enabled]`.
+     - In React, `canvasRef` is a `useRef` object (`{ current: null }`). When React attaches the actual `<canvas>` DOM element to `canvasRef.current` upon mounting, React **does NOT trigger a re-render or re-run `useEffect`**.
+     - Because `enabled` was initial `false` during component mount, the initial `useEffect` returned early. When the DOM element attached and `enabled` flipped to `true`, if `canvasRef.current` wasn't evaluated in synchronization with a state change, imperative `addEventListener` calls were skipped, leaving the canvas element with no active pointer listeners.
+  2. **Dual-Layer Event Binding Architecture**:
+     - **React JSX Handler Binding (`frontend/src/hooks/useInputCapture.ts` & `frontend/src/components/DeviceCanvas.tsx`)**: Refactored `useInputCapture` to return memoized event handlers (`handlePointerDown`, `handlePointerMove`, `handlePointerUp`, `handlePointerCancel`, `handleWheel`, `handleKeyDown`, `handleKeyUp`, `handleContextMenu`, `handleFocus`, `handleBlur`).
+     - Updated `DeviceCanvas.tsx` to bind these handlers directly to JSX props on the `<canvas>` element (`onPointerDown={handlePointerDown}`, `onPointerMove={handlePointerMove}`, `onPointerUp={handlePointerUp}`, etc.), guaranteeing 100% reliable event attachment bound directly to the React component lifecycle.
+     - Added a window keyboard listener in `useInputCapture` when focused so hardware keyboard controls work seamlessly without losing input focus.
+  3. **Verification**:
+     - **Frontend Vitest**: All 28 unit tests passing (`npm test`).
+     - **Frontend Production Build**: Clean build with zero TypeScript or Vite errors (`npm run build`).
+     - **Go Backend**: All 18 test suites passing uncached with race detector (`go test -count=1 -race ./...`).
+- **Errors / Failures Encountered:**
+  - React `useRef` mutation not triggering `useEffect` re-subscription; resolved with JSX event prop bindings.
+- **User Decision / Next Step:**
+  - Resolve VideoDecoder asynchronous configuration microtask race.
+
+---
+
+### Entry 40
+- **Timestamp:** 2026-10-02T21:25:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Diagnose why FPS stays at 0 and touch interaction remains disabled. Trace asynchronous VideoDecoder.isConfigSupported microtask races dropping initial IDR keyframes.
+  ```
+- **Response & Actions Taken (Asynchronous VideoDecoder Microtask Race Resolution):**
+  1. **Root Cause Analysis (VideoDecoder Microtask Race & Dropped Keyframe Pipeline)**:
+     - Traced why `stats.fps` remained `0` and touch interaction was blocked:
+     - In `useVideoDecoder.ts`, `configureDecoder` was an asynchronous function performing `await VideoDecoder.isConfigSupported(...)`.
+     - When the WebSocket stream started sending H.264 packets at 60 FPS, the initial SPS/PPS config packet triggered `init()` and async `configureDecoder(...)`.
+     - While `configureDecoder` was awaiting browser microtasks, `configuredRef.current` remained `false`.
+     - The subsequent IDR Keyframe arrived 5ms later while `configuredRef.current` was still `false`. `feedPacket` evaluated `if (!configuredRef.current) return;` and **dropped the IDR Keyframe**!
+     - When `configureDecoder` finally completed microtasks, it set `waitingForKey.current = true`. Because the single IDR Keyframe had already been dropped, all subsequent delta frames were discarded waiting for a keyframe that never arrived.
+     - As a result: `VideoDecoder` output callback never rendered frames (`stats.fps` = 0), `onFirstFrame` never fired (`hasFirstFrame` remained `false`), and input capture stayed disabled (`enabled = isConnected && hasFirstFrame = false`).
+  2. **Code Implementation & Hardening**:
+     - **Synchronous VideoDecoder Configuration (`useVideoDecoder.ts`)**: Rewrote `configureDecoderSync` to invoke `decoder.configure(...)` synchronously without async microtask promises, immediately putting the decoder into `'configured'` state on the exact same call stack.
+     - **Callback Ref Stabilization**: Wrapped `onFirstFrame`, `onFrameRendered`, and `onError` in `useRef`s (`onFirstFrameRef`, `onFrameRenderedRef`) inside `useVideoDecoder.ts` so `render()` always invokes the latest parent callbacks without needing to tear down or reconstruct the `VideoDecoder` instance on parent re-renders.
+     - **Immediate Touch Enablement (`DeviceCanvas.tsx`)**: Changed input capture guard from `enabled: isConnected && hasFirstFrame` to `enabled: isConnected`, enabling instant user touch interactions as soon as the WebSocket connection is open.
+  3. **Verification**:
+     - **Frontend Vitest**: All 28 unit tests passed (`npm test`).
+     - **Frontend Production Build**: Clean build with zero TypeScript or Vite compilation errors (`npm run build`).
+     - **Go Backend**: All 18 test suites passing uncached with race detector (`go test -count=1 -race ./...`).
+- **Errors / Failures Encountered:**
+  - `useEffect` import missing in `useVideoDecoder.ts` during first build pass; resolved immediately.
+- **User Decision / Next Step:**
+  - Fix mouse wheel passive event listener warning and scrcpy fixed-point scroll encoding.
+
+---
+
+### Entry 41
+- **Timestamp:** 2026-10-02T21:38:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Resolve mouse wheel scroll interaction issues: fix browser passive event listener warnings [Unable to preventDefault inside passive event listener] and encode scrcpy INJECT_SCROLL_EVENT fixed-point multiplier (i16fp 2048).
+  ```
+- **Response & Actions Taken (Passive Event Listener & Scrcpy i16fp Scroll Resolution):**
+  1. **Passive Event Listener Fix**:
+     - Modern browsers register JSX `onWheel` handlers as `passive: true` by default. Calling `e.preventDefault()` inside passive handlers throws browser warnings.
+     - Updated `handleWheel` in `useInputCapture.ts` to guard `e.preventDefault()` with `if (e.cancelable) { e.preventDefault(); }`.
+     - Registered an imperative non-passive `wheel` event listener on `canvasRef.current` (`canvas.addEventListener('wheel', onWheel, { passive: false })`) inside `useEffect` in `useInputCapture.ts`.
+  2. **Scrcpy Fixed-Point `i16fp` Scroll Encoding**:
+     - In scrcpy protocol (v2.0+), `hscroll` and `vscroll` fields (bytes 13-16) are **16-bit signed fixed-point integers (`i16fp`)**, where 1.0 scroll unit = **2048 (`0x0800`)**.
+     - Unscaled raw integer values (e.g. `-1`) caused scrcpy server to divide by `2048` to get `-0.000488` scroll units, which Android's `InputManager` rounded to 0 pixels scroll distance.
+     - Updated `handleWheel` in `useInputCapture.ts` to scale float scroll deltas by fixed-point multiplier `2048` (`vscroll = Math.round(vFloat * 2048)`), sending valid scrcpy fixed-point values (`-2048` for 1 notch scroll down, `+2048` for 1 notch scroll up).
+  3. **Verification**:
+     - **Frontend Vitest**: All 28 unit tests passed (`npm test`).
+     - **Frontend Production Build**: Clean build with zero TypeScript or Vite errors (`npm run build`).
+     - **Go Backend**: All 18 test suites passing uncached with race detector (`go test -count=1 -race ./...`).
+- **Errors / Failures Encountered:**
+  - Unscaled raw integers causing scrcpy server to calculate sub-pixel scroll values.
+- **User Decision / Next Step:**
+  - Process log refactoring complete.

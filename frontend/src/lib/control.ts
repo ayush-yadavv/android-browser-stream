@@ -134,3 +134,32 @@ export function buildTextEvent(text: string): Uint8Array {
 
   return buf;
 }
+
+export interface SetClipboardParams {
+  sequence?: bigint;
+  paste?: boolean;
+  text: string;
+}
+
+/**
+ * Builds a SET_CLIPBOARD message (14 + N bytes).
+ */
+export function buildSetClipboardEvent({
+  sequence = 0n,
+  paste = true,
+  text,
+}: SetClipboardParams): Uint8Array {
+  const encoder = new TextEncoder();
+  const textBytes = encoder.encode(text);
+  const buf = new Uint8Array(14 + textBytes.byteLength);
+  const view = new DataView(buf.buffer);
+
+  view.setUint8(0, MSG_TYPE_SET_CLIPBOARD);
+  view.setBigUint64(1, sequence, false);
+  view.setUint8(9, paste ? 1 : 0);
+  view.setUint32(10, textBytes.byteLength, false);
+  buf.set(textBytes, 14);
+
+  return buf;
+}
+

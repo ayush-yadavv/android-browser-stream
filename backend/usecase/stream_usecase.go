@@ -258,11 +258,12 @@ func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Sessio
 	}
 	defer server.Close()
 
-	// Initial screen wake kick to prompt SurfaceFlinger to produce keyframe immediately
+	// Initial screen wake kick and visual touch indicator setup
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		wakeCmd := u.adb.Shell(context.Background(), serial, "input", "keyevent", "82")
 		_ = wakeCmd.Run()
+		_ = u.adb.Shell(context.Background(), serial, "settings", "put", "system", "show_touches", "1").Run()
 	}()
 
 	// 4. Mark session as streaming

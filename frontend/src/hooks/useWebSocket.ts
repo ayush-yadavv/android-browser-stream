@@ -138,7 +138,7 @@ export function useWebSocket({
     framed[0] = CHANNEL_CONTROL;
     framed.set(payloadBytes, 1);
 
-    ws.send(framed.buffer);
+    ws.send(framed);
   }, []);
 
   const sendPing = useCallback(() => {

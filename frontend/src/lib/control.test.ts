@@ -5,10 +5,12 @@ import {
   buildScrollEvent,
   buildKeycodeEvent,
   buildTextEvent,
+  buildSetClipboardEvent,
   MSG_TYPE_INJECT_KEYCODE,
   MSG_TYPE_INJECT_TEXT,
   MSG_TYPE_INJECT_TOUCH_EVENT,
   MSG_TYPE_INJECT_SCROLL_EVENT,
+  MSG_TYPE_SET_CLIPBOARD,
 } from './control';
 
 describe('control serializers', () => {
@@ -96,4 +98,24 @@ describe('control serializers', () => {
     const extracted = decoder.decode(bytes.subarray(5));
     expect(extracted).toBe(text);
   });
+
+  it('serializes set clipboard event correctly to 14 + N bytes', () => {
+    const text = 'hello paste 📋';
+    const encoder = new TextEncoder();
+    const textBytes = encoder.encode(text);
+    const bytes = buildSetClipboardEvent({ sequence: 100n, paste: true, text });
+
+    expect(bytes.byteLength).toBe(14 + textBytes.byteLength);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+    expect(view.getUint8(0)).toBe(MSG_TYPE_SET_CLIPBOARD);
+    expect(view.getBigUint64(1, false)).toBe(100n);
+    expect(view.getUint8(9)).toBe(1);
+    expect(view.getUint32(10, false)).toBe(textBytes.byteLength);
+
+    const decoder = new TextDecoder();
+    const extracted = decoder.decode(bytes.subarray(14));
+    expect(extracted).toBe(text);
+  });
 });
+

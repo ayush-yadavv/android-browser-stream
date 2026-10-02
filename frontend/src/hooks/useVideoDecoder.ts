@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { concatBuffers, extractCodecProfile, hasSps } from '../lib/h264';
 
 interface DecoderOptions {
@@ -21,74 +21,92 @@ export function useVideoDecoder({
   const configuredRef = useRef(false);
   const currentCodecRef = useRef<string>('avc1.42e01f');
   const cachedConfigRef = useRef<Uint8Array | null>(null);
-  const reconfiguringRef = useRef<Promise<void> | null>(null);
   const waitingForKey = useRef(true);
   const firstFrameReported = useRef(false);
+
+  const onFirstFrameRef = useRef(onFirstFrame);
+  const onFrameRenderedRef = useRef(onFrameRendered);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    onFirstFrameRef.current = onFirstFrame;
+    onFrameRenderedRef.current = onFrameRendered;
+    onErrorRef.current = onError;
+  });
 
   const render = useCallback(() => {
     rafId.current = 0;
     const canvas = canvasRef.current;
-    if (pendingFrame.current && ctxRef.current && canvas) {
+    if (pendingFrame.current && canvas) {
       const frame = pendingFrame.current;
 
-      // Dynamically adapt canvas buffer dimensions if resolution changes
-      if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
-        canvas.width = frame.displayWidth;
-        canvas.height = frame.displayHeight;
+      if (!ctxRef.current) {
+        ctxRef.current = canvas.getContext('2d', {
+          alpha: false,
+          desynchronized: true,
+        });
       }
 
-      ctxRef.current.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      if (ctxRef.current) {
+        // Dynamically adapt canvas buffer dimensions if resolution changes
+        if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+          canvas.width = frame.displayWidth;
+          canvas.height = frame.displayHeight;
+        }
 
-      onFrameRendered?.();
+        ctxRef.current.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      }
+
+      onFrameRenderedRef.current?.();
 
       if (!firstFrameReported.current) {
         firstFrameReported.current = true;
-        onFirstFrame?.();
+        onFirstFrameRef.current?.();
       }
 
       // Mandatory: release GPU hardware surface immediately
       frame.close();
       pendingFrame.current = null;
     }
-  }, [canvasRef, onFirstFrame, onFrameRendered]);
+  }, [canvasRef]);
 
-  const configureDecoder = useCallback(async (codec: string) => {
-    if (!decoderRef.current || (decoderRef.current.state as string) === 'closed') return;
+  const configureDecoderSync = useCallback((codec: string) => {
+    if (!decoderRef.current || (decoderRef.current.state as string) === 'closed') return false;
 
     try {
-      const config: VideoDecoderConfig = {
+      decoderRef.current.configure({
         codec,
         optimizeForLatency: true,
         hardwareAcceleration: 'prefer-hardware',
-      };
-
-      const support = await VideoDecoder.isConfigSupported(config);
-      if (decoderRef.current && (decoderRef.current.state as string) !== 'closed') {
-        if (support.supported && support.config) {
-          decoderRef.current.configure(support.config);
-        } else {
-          decoderRef.current.configure({
-            ...config,
-            hardwareAcceleration: 'no-preference',
-          });
-        }
+      });
+      currentCodecRef.current = codec;
+      configuredRef.current = true;
+      return true;
+    } catch (_) {
+      try {
+        decoderRef.current.configure({
+          codec,
+          optimizeForLatency: true,
+        });
         currentCodecRef.current = codec;
         configuredRef.current = true;
+        return true;
+      } catch (err: any) {
+        console.warn(`Failed to configure decoder with codec ${codec}:`, err);
+        configuredRef.current = false;
+        return false;
       }
-    } catch (err: any) {
-      console.warn(`Failed to configure decoder with codec ${codec}:`, err);
     }
   }, []);
 
-  const init = useCallback(async () => {
+  const init = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Desynchronized 2D canvas context bypasses OS compositor queue (~16ms latency reduction)
-    ctxRef.current = canvas.getContext('2d', {
-      alpha: false,
-      desynchronized: true,
-    });
+    if (canvas && !ctxRef.current) {
+      ctxRef.current = canvas.getContext('2d', {
+        alpha: false,
+        desynchronized: true,
+      });
+    }
 
     try {
       if (decoderRef.current && (decoderRef.current.state as string) !== 'closed') {
@@ -113,21 +131,21 @@ export function useVideoDecoder({
           console.error('WebCodecs VideoDecoder fatal error:', e);
           configuredRef.current = false;
           waitingForKey.current = true;
-          onError?.(e);
+          onErrorRef.current?.(e);
         },
       });
 
-      await configureDecoder(currentCodecRef.current);
+      configureDecoderSync(currentCodecRef.current);
       waitingForKey.current = true;
       firstFrameReported.current = false;
     } catch (err: any) {
       console.error('Failed to initialize WebCodecs VideoDecoder:', err);
-      onError?.(err);
+      onErrorRef.current?.(err);
     }
-  }, [canvasRef, render, configureDecoder, onError]);
+  }, [canvasRef, render, configureDecoderSync]);
 
   const feedPacket = useCallback(
-    async (nalData: Uint8Array, ptsUs: number, isKey: boolean, isConfig?: boolean) => {
+    (nalData: Uint8Array, ptsUs: number, isKey: boolean, isConfig?: boolean) => {
       // 1. Handle SPS/PPS parameter set packets
       if (isConfig) {
         cachedConfigRef.current = nalData;
@@ -135,26 +153,18 @@ export function useVideoDecoder({
           const detectedCodec = extractCodecProfile(nalData);
           if (detectedCodec !== currentCodecRef.current) {
             console.log(`Detected stream codec profile: ${detectedCodec}, reconfiguring decoder.`);
-            reconfiguringRef.current = configureDecoder(detectedCodec).then(() => {
-              reconfiguringRef.current = null;
-            });
+            configureDecoderSync(detectedCodec);
           }
         }
         return; // Config packets are parameter sets; do not decode directly
       }
 
-      // If reconfiguring is in progress, await resolution so keyframe is decoded under the target codec
-      if (reconfiguringRef.current) {
-        await reconfiguringRef.current;
-      }
-
-      // Auto-recover decoder if in closed state
+      // Auto-recover decoder synchronously if in closed state or uninitialized
       if (!decoderRef.current || (decoderRef.current.state as string) === 'closed') {
         init();
-        return;
       }
 
-      if (!configuredRef.current || decoderRef.current.state !== 'configured') return;
+      if (!configuredRef.current || decoderRef.current?.state !== 'configured') return;
 
       // 2. Prepend cached SPS/PPS to keyframe if missing parameter sets
       let payload = nalData;
@@ -189,7 +199,7 @@ export function useVideoDecoder({
         waitingForKey.current = true;
       }
     },
-    [configureDecoder, init],
+    [configureDecoderSync, init],
   );
 
   const destroy = useCallback(() => {
