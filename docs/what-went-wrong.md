@@ -1,6 +1,6 @@
-# What Went Wrong: Engineering Post-Mortem & Lessons Learned
+# What Went Wrong: DroidCanvas Engineering Post-Mortem & Lessons Learned
 
-Building a real-time, sub-50ms cloud-native streaming engine under a 72-hour deadline involves navigating complex interactions between Linux kernel modules, container virtualization, Android OS boot milestones, video codecs, and browser rendering lifecycles.
+Building **DroidCanvas**, an ultra-low-latency cloud-native Android streaming engine, involved navigating complex interactions between Linux kernel modules, container virtualization, Android OS boot milestones, video codecs, and browser rendering lifecycles.
 
 This document details the critical failures, race conditions, memory leaks, and architectural dead ends encountered during development, along with their root cause analyses and engineering solutions.
 

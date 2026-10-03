@@ -1,8 +1,8 @@
-### Technical Report: PRD-Aligned Survey of Android-to-Browser Streaming Approaches
+### Technical Report: DroidCanvas Architectural Survey of Android-to-Browser Streaming Approaches
 
-##### 1\. Executive Directive & Assignment Scope
+##### 1\. Executive Directive & System Scope
 
-The objective of this report is to define and evaluate high-performance architectural approaches for streaming real-time Android environments to web-based frontends. To meet the specific requirements of the HealthTick Health-Tech platform, all surveyed solutions are measured against the following four primary PRD constraints:
+The objective of this report is to define and evaluate high-performance architectural approaches for streaming real-time Android environments to web-based frontends. To meet the specific requirements of the DroidCanvas platform, all surveyed solutions are measured against the following four primary PRD constraints:
 
 * **100% Free and Open Source Software (FOSS):**  Absolute compliance with FOSS licensing (GPL, AGPL, or MIT) is required to ensure long-term maintainability and cost-efficiency.  
 * **Real Android OS:**  The solution must run a native Android ART runtime capable of executing standard APKs; WebAssembly-based UI simulations or "skin-only" previews are non-compliant.  
@@ -15,7 +15,7 @@ The recommended production architecture utilizes  **redroid**  for containerized
 
 * **Zero Video-Transcoding CPU Overhead:**  The host forwards raw H.264/H.265 packets directly from the container, avoiding costly server-side re-encoding.  
 * **Sub-50ms Glass-to-Glass Latency:**  The direct WebSocket-to-WebCodecs pipeline eliminates the buffer-heavy latency typical of HLS or MPEG-DASH.  
-* **Per-User Container Isolation:**  Using redroid ensures isolated ART runtimes. This prevents APK collisions and provides secure, per-user session sandboxing, which is essential for a "Real Android" PRD compliant environment.**Evaluation**  This approach is the gold standard for HealthTick because it is  **100% FOSS (GPL-3.0)**  and provides the highest degree of architectural flexibility for cloud scaling.
+* **Per-User Container Isolation:**  Using redroid ensures isolated ART runtimes. This prevents APK collisions and provides secure, per-user session sandboxing, which is essential for a "Real Android" PRD compliant environment.**Evaluation**  This approach is the gold standard for DroidCanvas because it is  **100% FOSS (GPL-3.0)**  and provides the highest degree of architectural flexibility for cloud scaling.
 
 ##### 3\. Alternative Approach: WebRTC Direct Peer Streaming (webscreen)
 
@@ -31,7 +31,7 @@ Legacy methods rely on the  **OpenSTF**  ecosystem (now maintained by  **DeviceF
 
 ##### 5\. Discouraged & Non-Compliant Approaches (Disqualification Matrix)
 
-The following methodologies were evaluated and subsequently disqualified for failing to meet the HealthTick PRD.| Approach | Constraint Violated | Technical Rationale || \------ | \------ | \------ || **ADB Screencap Polling** | Sub-100ms Latency | Repeated process invocation and polling overhead leads to \>300ms latency. || **Appetize.io / SaaS** | 100% FOSS / Cloud Hostability | Proprietary commercial services violate the self-hosted FOSS requirement. || **FlutterFlow Preview** | Real Android OS | Uses WebAssembly UI simulations; cannot execute native APKs or the ART runtime. |
+The following methodologies were evaluated and subsequently disqualified for failing to meet the DroidCanvas PRD.| Approach | Constraint Violated | Technical Rationale || \------ | \------ | \------ || **ADB Screencap Polling** | Sub-100ms Latency | Repeated process invocation and polling overhead leads to \>300ms latency. || **Appetize.io / SaaS** | 100% FOSS / Cloud Hostability | Proprietary commercial services violate the self-hosted FOSS requirement. || **FlutterFlow Preview** | Real Android OS | Uses WebAssembly UI simulations; cannot execute native APKs or the ART runtime. |
 
 ##### 6\. PRD Compliance Evaluation Matrix
 
@@ -43,20 +43,19 @@ Screencap Polling,N/A,Real Android,Cloud VM,\>300ms,FAIL  (Latency)
 Commercial SaaS,Proprietary,Real Android,External,\<100ms,FAIL  (FOSS)  
 WASM Simulation,Mixed,Simulation,Cloud VM,\<50ms,FAIL  (Real OS)
 
-##### 7\. Concrete Execution Recommendations for HealthTick
+##### 7\. Concrete Execution Recommendations for DroidCanvas
 
 To implement the recommended  **redroid \+ WebCodecs**  solution, follow this deployment roadmap:
 
 1. **Environment Setup:**  Deploy a Linux-based Cloud VM with Docker. Initialize redroid containers with appropriate memory limits to ensure per-user isolation.  
-2. **Stream Layer Integration:**  Deploy  **ws-scrcpy-web**  as the WebSocket proxy. Ensure the proxy is configured to multiplex Video, Audio, and Control sockets.  
+2. **Stream Layer Integration:**  Deploy a Go-based multiplexer proxy configured to route Video, Audio, and Control sockets.  
 3. **Security & API Access:**  Configure a TLS-terminating reverse proxy (Caddy or Nginx). The proxy  **must**  forward the X-Forwarded-Proto: https header. This ensures the app recognizes a secure context and enables the WebCodecs VideoDecoder API in the browser.  
-4. **Frontend Implementation:**  Use the programmatic WsScrcpy.startStream() API to embed the interactive device view into the primary application UI.
+4. **Frontend Implementation:**  Use WebCodecs `VideoDecoder` directly with HTML5 Canvas desynchronized context to achieve sub-50ms glass-to-glass latency.
 
-##### 8\. Architectural Standards for Submission
+##### 8\. Architectural Standards & Production Criteria
 
-When presenting this solution for the HealthTick assignment, adhere to these professional standards. Internal data suggests that reviewers spend only  **5 to 20 minutes**  evaluating takehome submissions; clarity and robustness are paramount.
+When engineering this solution for DroidCanvas, adhere to these professional production standards: clarity, resilience, and robustness are paramount.
 
-* **Edge Case Resilience:**  Formally document how the system handles network discovery failures and sudden device disconnects. Reviewers look for robust error handling in the WebSocket lifecycle.  
-* **Persistence & Documentation:**  Explicitly define the config.json structure and the wsscrcpy.db (SQLite) schema. Use the SQLite store for persisting user state, such as device labels and theme preferences (dark/light), to demonstrate an understanding of stateful architecture.  
-* **Functional Prototyping Strategy:**  Follow the "Prototype quickly, build nicely after" methodology. Prioritize a stable, functional H.264 stream first. Once the core latency targets are met, document extension points for multi-codec support (H.265/AV1) and UI enhancements.
-
+* **Edge Case Resilience:**  Formally document how the system handles network discovery failures and sudden device disconnects. Ensure robust error handling in the WebSocket lifecycle.  
+* **Persistence & Documentation:**  Use a clean database schema (SQLite store) for persisting user state and sessions to demonstrate stateful architecture.  
+* **Functional Prototyping Strategy:**  Prioritize a stable, functional H.264 stream first. Once the core latency targets are met, document extension points for multi-codec support (H.265/AV1) and UI enhancements.

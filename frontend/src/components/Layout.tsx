@@ -51,7 +51,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <Smartphone className="w-4 h-4" />
           </div>
           <Link to="/" className="font-semibold tracking-tight text-ink text-sm sm:text-base hover:opacity-90 transition-opacity">
-            HealthTick <span className="text-ink-muted font-normal text-xs sm:text-sm">· Android in Browser</span>
+            DroidCanvas <span className="text-ink-muted font-normal text-xs sm:text-sm">· Cloud Android Engine</span>
           </Link>
         </div>
 
@@ -85,13 +85,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
 
           <a
-            href="https://github.com"
+            href="https://github.com/ayush-yadavv/android-browser-stream"
             target="_blank"
             rel="noreferrer"
+            title="android-browser-stream repository on GitHub"
           >
             <Button variant="default" size="sm" className="gap-1.5 h-8">
               <Github className="w-3.5 h-3.5" />
-              <span>Assignment Repo</span>
+              <span>GitHub</span>
             </Button>
           </a>
         </div>
@@ -131,14 +132,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
           <div className="space-y-2">
             <a
-              href="https://github.com"
+              href="https://github.com/ayush-yadavv/android-browser-stream"
               target="_blank"
               rel="noreferrer"
               className="block"
             >
               <Button variant="default" className="w-full justify-center">
                 <Github className="w-4 h-4 mr-2" />
-                <span>View GitHub Repository</span>
+                <span>View on GitHub</span>
               </Button>
             </a>
           </div>
@@ -153,7 +154,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Footer per DESIGN.md */}
       <footer className="border-t border-hairline bg-canvas py-8 px-6 text-center text-xs text-ink-muted">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© 2026 HealthTick Take-Home Assignment · Sub-50ms Cloud Native AIC</p>
+          <p>© 2026 DroidCanvas · Ephemeral Cloud-Native Android Streaming Engine</p>
           <div className="flex items-center space-x-4">
             <span className="inline-flex items-center gap-1 text-ink-muted">
               <ShieldCheck className="w-3.5 h-3.5 text-accent-blue" /> Ephemeral Redroid Sandbox

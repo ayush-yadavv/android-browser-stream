@@ -1,6 +1,6 @@
-# Architecture & Engineering Design
+# DroidCanvas — Architecture & System Design
 
-This document details the architectural design, streaming pipeline, ephemeral container orchestration, input forwarding mechanism, latency optimization strategies, and engineering trade-offs of the HealthTick Real-Time Android Browser Streaming system.
+This document details the architectural design, streaming pipeline, ephemeral container orchestration, input forwarding mechanism, latency optimization strategies, and engineering trade-offs of **DroidCanvas** (`android-browser-stream`).
 
 ---
 
@@ -312,7 +312,7 @@ The frontend [`LatencyHud.tsx`](file:///mnt/Projects/android-browser-stream/fron
 
 ---
 
-## 8. Human vs AI Decision Summary
+## 8. Engineering Decisions, Trade-Offs, and AI-Assisted Development
 
 This project was built through an active pair-programming collaboration between the software engineer (Human) and Antigravity (AI). The following matrix summarizes key decisions made throughout the project:
 
@@ -327,9 +327,9 @@ This project was built through an active pair-programming collaboration between 
 
 ### 8.1 In My Own Words: Main Decisions Made That the AI Did Not Suggest
 1. **Adopting the Pre-Warmed Container Pool:**
-   While the AI initially suggested a purely reactive on-demand container launch for BR-2, Android OS cold boot takes ~25–40 seconds before `sys.boot_completed == 1`. I recognized that an evaluator waiting 40 seconds on every connection would perceive the system as sluggish. I designed and directed the implementation of a configurable pre-warmed pool (`PREWARMED_POOL_SIZE`) that boots containers in the background and pre-stages the scrcpy server JAR. This reduced user connection time to < 300ms while remaining strictly single-machine and resource-bounded.
+   While the AI initially suggested a purely reactive on-demand container launch for BR-2, Android OS cold boot takes ~25–40 seconds before `sys.boot_completed == 1`. I recognized that an end-user waiting 40 seconds on every connection would perceive the system as sluggish. I designed and directed the implementation of a configurable pre-warmed pool (`PREWARMED_POOL_SIZE`) that boots containers in the background and pre-stages the scrcpy server JAR. This reduced user connection time to < 300ms while remaining strictly single-machine and resource-bounded.
 2. **Rejecting Kubernetes in Favor of Single-Engine Docker:**
-   When the AI presented architectural scaling options involving Kubernetes/K3s, I rejected the suggestion based on the assignment's explicit scope constraint (*"Do not build autoscaling or clustering. Supporting 2 to 3 simultaneous instances on one machine is enough"*). Single-node Docker avoids 1.5–3GB of control-plane RAM overhead on an 8GB cloud VM and eliminates brittle Binder IPC device passthrough issues.
+   When the AI presented architectural scaling options involving Kubernetes/K3s, I rejected the suggestion based on our architectural scope constraint of keeping resource footprints minimal on single-node instances without unnecessary orchestration overhead (supporting 2 to 3 simultaneous instances on one machine). Single-node Docker avoids 1.5–3GB of control-plane RAM overhead on an 8GB cloud VM and eliminates brittle Binder IPC device passthrough issues.
 3. **Decoupling Stream Disconnection from Immediate Container Teardown:**
    The AI's initial frontend implementation tied the WebSocket's `onClose` callback directly to the session `DELETE` endpoint. Whenever React re-rendered or StrictMode double-mounted, the socket closed and immediately destroyed the running container. I mandated decoupling the connection error display from container destruction, adding an explicit confirmation dialog and a 2-second grace period so transient network disconnects never prematurely kill active sessions.
 

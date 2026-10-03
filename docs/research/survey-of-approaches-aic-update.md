@@ -2,7 +2,7 @@
 
 #### 1\. Executive Mandate & Strategic Scope
 
-This report mandates the strategic transition of the HealthTick "Survey of Approaches" toward a modern Cloud Native containerization paradigm. The core mission is to enforce an  **Android-in-Cloud (AIC)**  architecture—defined as a containerized execution model where the Android OS runtime (AOSP) is decoupled from underlying hardware, utilizing host-kernel  *binderfs*  for Inter-Process Communication (IPC) and exposing the display buffer via socket-based multiplexing.**Strategic Objectives**
+This report establishes the Cloud Native containerization paradigm for DroidCanvas. The core mission is to enforce an  **Android-in-Cloud (AIC)**  architecture—defined as a containerized execution model where the Android OS runtime (AOSP) is decoupled from underlying hardware, utilizing host-kernel  *binderfs*  for Inter-Process Communication (IPC) and exposing the display buffer via socket-based multiplexing.**Strategic Objectives**
 
 * **100% FOSS Compliance:**  Verification of a zero-licensing-friction stack utilizing exclusively Free and Open Source Software.  
 * **Real Android OS Execution:**  Mandating the use of a native Android Open Source Project (AOSP) runtime (ART) to ensure 1:1 compatibility with standard APK binaries.  
@@ -35,7 +35,7 @@ This is the legacy standard for native C binary buffer capture.**Efficiency Crit
 
 #### 6\. Discouraged Approach: ADB Screencap Polling
 
-The "adb exec-out screencap" method is formally classified as non-viable for HealthTick.
+The "adb exec-out screencap" method is formally classified as non-viable for DroidCanvas.
 
 ##### Non-Viable Model
 
@@ -68,7 +68,7 @@ Resource Efficiency,High  (AV1/H.265),Medium,Low,Very Low
 Verification of the following standards is required for all AIC deployments.**Edge Case Handling & Security**
 
 * **Secure Context Mandate:**  WebCodecs and modern media APIs are only exposed in a "Secure Context." Deployments must utilize  **Local HTTPS (via mkcert)** . For professional-grade delivery, the CA (Certificate Authority)  **must be manually installed**  on client devices; simply "clicking through a browser warning" is insufficient and leaves the secure context unverified.  
-* **Network Discovery:**  Implement explicit LAN subnet definitions for Docker bridge networks to ensure reliable device discovery.**Documentation Deliverables**  All project submissions must include a  **"Summary of what was built and what was (deliberately) not."**  This provides reviewers with critical context on strategic design decisions—such as the choice of  **SQLite**  for lightweight local persistence over a heavy database cluster.
+* **Network Discovery:**  Implement explicit LAN subnet definitions for Docker bridge networks to ensure reliable device discovery.**Documentation Deliverables**  All project documentation includes explicit architectural trade-off summaries detailing strategic design decisions—such as the choice of  **SQLite**  for lightweight local persistence over a heavy database cluster.
 
 ##### Security Architecture Callout
 
@@ -77,4 +77,3 @@ A professional deployment must enforce:
 * **Access Control:**  SameSite (Strict/Lax) and Partitioned (CHIPS) cookies for embedded frames.  
 * **Host Allowlists:**  Strict validation of Host and Origin headers to prevent DNS-rebinding and CSRF.  
 * **TLS Termination:**  Use of reverse proxies for containerized environments where Local HTTPS is not host-managed.
-

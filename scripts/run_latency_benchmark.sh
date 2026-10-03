@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# HealthTick Real-Time Android Browser Streaming
+# DroidCanvas — Ephemeral Cloud-Native Android Streaming Engine
 # Automated Latency Benchmark & Glass-to-Glass Profiler (CR-3)
 # ==============================================================================
 
@@ -69,7 +69,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo -e "${CYAN}======================================================================${RESET}"
-echo -e "${BOLD}  HealthTick Automated Latency Benchmarking Suite (CR-3)${RESET}"
+echo -e "${BOLD}  DroidCanvas Automated Latency Benchmarking Suite (CR-3)${RESET}"
 echo -e "${CYAN}======================================================================${RESET}"
 
 # 1. Healthcheck

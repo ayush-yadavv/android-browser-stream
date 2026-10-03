@@ -1,8 +1,8 @@
-### Tech Stack and Cloud Native Container Specification: HealthTick Real-Time Android Streaming
+### Tech Stack and Cloud Native Container Specification: DroidCanvas — Ephemeral Cloud-Native Android Streaming Engine
 
 #### 1\. Executive System Architecture & Data Flow
 
-The HealthTick streaming pipeline is an end-to-end, ultra-low latency architecture designed for real-time Android interaction within a secure web context. The system SHALL prioritize native performance by leveraging host-kernel IPC and zero-transcoding relay mechanisms. The entire stack is optimized for single-node Linux cloud VM hostability.
+The DroidCanvas streaming pipeline is an end-to-end, ultra-low latency architecture designed for real-time Android interaction within a secure web context. The system SHALL prioritize native performance by leveraging host-kernel IPC and zero-transcoding relay mechanisms. The entire stack is optimized for single-node Linux cloud VM hostability.
 
 ##### Four-Stage Data Flow
 

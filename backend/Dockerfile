@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:alpine AS builder
 
 WORKDIR /app
 
@@ -9,14 +9,19 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/server cmd/server/main.go
 
-FROM alpine:3.20
+FROM alpine:latest
 
-RUN apk add --no-cache ca-certificates android-tools ffmpeg
+RUN apk add --no-cache ca-certificates android-tools ffmpeg wget
 
 WORKDIR /app
 
+RUN mkdir -p /app/bin /app/data
+
+# Ensure scrcpy-server v2.7 is present inside the container image
+RUN wget -q "https://github.com/Genymobile/scrcpy/releases/download/v2.7/scrcpy-server-v2.7" -O /app/bin/scrcpy-server \
+    && chmod +x /app/bin/scrcpy-server
+
 COPY --from=builder /app/server /app/server
-COPY bin /app/bin
 
 EXPOSE 8080
 

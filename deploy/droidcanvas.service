@@ -1,0 +1,31 @@
+[Unit]
+Description=DroidCanvas Ephemeral Cloud Android Streaming Engine
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/android-browser-stream
+ExecStart=/opt/android-browser-stream/backend/server
+Restart=always
+RestartSec=3s
+LimitNOFILE=65536
+
+# Environment Configuration
+Environment=SERVER_PORT=8080
+Environment=GIN_MODE=release
+Environment=REDROID_IMAGE=redroid/redroid:13.0.0-latest
+Environment=ADB_PORT_START=5555
+Environment=MAX_SESSIONS=3
+Environment=SCRCPY_BIN_PATH=/opt/android-browser-stream/backend/bin/scrcpy-server
+Environment=DB_PATH=/opt/android-browser-stream/backend/data/sessions.db
+Environment=PREWARMED_POOL_SIZE=1
+
+# Logging to systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=droidcanvas
+
+[Install]
+WantedBy=multi-user.target

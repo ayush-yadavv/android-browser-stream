@@ -1,12 +1,11 @@
-version: "3.8"
-
 services:
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: aic-backend
+    container_name: droidcanvas-backend
     restart: always
+    network_mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../backend/bin:/app/bin
@@ -20,16 +19,12 @@ services:
       - DB_PATH=/app/data/sessions.db
       - PREWARMED_POOL_SIZE=${PREWARMED_POOL_SIZE:-1}
       - GIN_MODE=release
-    networks:
-      - aic-net
 
   caddy:
     image: caddy:2.8-alpine
-    container_name: aic-proxy
+    container_name: droidcanvas-proxy
     restart: always
-    ports:
-      - "80:80"
-      - "443:443"
+    network_mode: host
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ../frontend/dist:/srv/frontend/dist:ro
@@ -39,14 +34,8 @@ services:
       - DOMAIN=${DOMAIN:-localhost}
     depends_on:
       - backend
-    networks:
-      - aic-net
 
 volumes:
   backend-data:
   caddy-data:
   caddy-config:
-
-networks:
-  aic-net:
-    driver: bridge

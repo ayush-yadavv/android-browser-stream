@@ -62,7 +62,7 @@ describe('protocol', () => {
   });
 
   it('parses device-to-host clipboard message', () => {
-    const text = 'https://healthtick.io';
+    const text = 'https://droidcanvas.io';
     const textBytes = new TextEncoder().encode(text);
     const buffer = new ArrayBuffer(6 + textBytes.length);
     const view = new DataView(buffer);

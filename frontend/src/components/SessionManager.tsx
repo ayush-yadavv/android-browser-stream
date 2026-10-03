@@ -53,16 +53,16 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       <section className="text-center space-y-5 pt-6 pb-2">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-pill bg-surface-1 border border-hairline text-xs font-medium text-ink-muted shadow-sm">
           <Sparkles className="w-3.5 h-3.5 text-accent-blue" />
-          <span>Cloud Native Android-in-Cloud (AIC) Stream</span>
+          <span>DroidCanvas Engine</span>
           <Badge variant="accent" className="ml-1 text-[10px] py-0 px-2">
             v2.7
           </Badge>
         </div>
 
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tighter text-ink display-title">
-          Interactive Android <br />
+          DroidCanvas <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-neutral-300 to-neutral-500">
-            Directly in Your Browser
+            Ephemeral Android in Browser
           </span>
         </h1>
 

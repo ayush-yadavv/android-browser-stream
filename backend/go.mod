@@ -3,9 +3,10 @@ module github.com/user/android-browser-stream/backend
 go 1.26.0
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/docker/docker v27.1.1+incompatible
 	github.com/docker/go-connections v0.5.0
-	github.com/gin-contrib/cors v1.7.9
+	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/spf13/viper v1.21.0
@@ -20,7 +21,6 @@ require (
 	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.7 // indirect
-	github.com/coder/websocket v1.8.15 // indirect
 	github.com/containerd/log v0.2.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# HealthTick Real-Time Android Browser Stream - Local Runner
+# DroidCanvas — Ephemeral Cloud-Native Android Streaming Engine - Local Runner
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,7 +23,7 @@ log_warn() { echo -e "${C_YELLOW}[WARN]${C_RESET} $*"; }
 log_err()  { echo -e "${C_RED}[ERR]${C_RESET}  $*"; }
 
 echo -e "${C_BOLD}====================================================${C_RESET}"
-echo -e "${C_BOLD}  HealthTick · Android-in-Cloud Browser Stream     ${C_RESET}"
+echo -e "${C_BOLD}  DroidCanvas · Ephemeral Cloud Android Engine    ${C_RESET}"
 echo -e "${C_BOLD}====================================================${C_RESET}"
 
 # 1. Dependency checks

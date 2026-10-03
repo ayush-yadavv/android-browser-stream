@@ -1,6 +1,6 @@
-# With More Time: Scaling & Production Roadmap
+# With More Time: DroidCanvas Scaling & Production Roadmap
 
-Given the 72-hour assignment constraints, our primary focus was building a rock-solid, sub-50ms glass-to-glass video streaming pipeline, ephemeral container orchestration, and interactive input forwarding adhering strictly to Clean Architecture and Test-Driven Development.
+In engineering **DroidCanvas**, our core focus was building a rock-solid, sub-50ms glass-to-glass video streaming pipeline, ephemeral container orchestration, and interactive input forwarding adhering strictly to Clean Architecture and Test-Driven Development.
 
 This document outlines the architectural enhancements, scaling strategies, hardware acceleration, and advanced features planned for a large-scale commercial production deployment.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * HealthTick Real-Time Android Browser Streaming
+ * DroidCanvas — Ephemeral Cloud-Native Android Streaming Engine
  * Automated Latency & Glass-to-Glass Benchmark Probe (CR-3)
  *
  * Measures:
@@ -125,7 +125,7 @@ function profileSurfaceFlinger(adbTarget) {
 // Main benchmark executor
 async function runBenchmark() {
   console.log('\x1b[36m%s\x1b[0m', '════════════════════════════════════════════════════════════════════════');
-  console.log('\x1b[1m\x1b[37m  HealthTick Latency & Glass-to-Glass Benchmark Suite (CR-3)\x1b[0m');
+  console.log('\x1b[1m\x1b[37m  DroidCanvas Latency & Glass-to-Glass Benchmark Suite (CR-3)\x1b[0m');
   console.log('\x1b[36m%s\x1b[0m', '════════════════════════════════════════════════════════════════════════');
   console.log(`Connecting to WebSocket: \x1b[33m${WS_URL}\x1b[0m`);
   console.log(`Target Samples: \x1b[32m${SAMPLE_COUNT}\x1b[0m`);
