@@ -1472,3 +1472,49 @@
   - None. All 7 fixes tested and validated.
 - **User Decision / Next Step:**
   - Changes staged and ready for git commit.
+
+---
+
+### Entry 63
+- **Timestamp:** 2026-10-03T17:21:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  why jitter is so high more than 2000 ms
+  ```
+- **Response & Actions Taken (Diagnosed Root Cause of >2000ms Jitter):**
+  1. Traced `jitterMs` calculation in [`frontend/src/hooks/useLatencyStats.ts`](frontend/src/hooks/useLatencyStats.ts) and [`frontend/src/components/DeviceCanvas.tsx`](frontend/src/components/DeviceCanvas.tsx).
+  2. Identified primary root causes:
+     - **Variable Frame Rate (VFR) on Static Screens**: Scrcpy and Android `MediaCodec` produce 0 frames when screen is idle. Pausing interaction for 2-5 seconds records a 2000-5000ms inter-frame arrival interval.
+     - **Naive Interval Standard Deviation**: `calculateJitter` calculates the standard deviation over a rolling 60-frame buffer of raw render intervals (`timestamp - lastFrameTime`) without filtering idle gaps or computing PTS deltas. A single 2-4s pause skews the standard deviation to >2000ms.
+     - **Buffer Retention**: Low frame rates during static screen keep outliers in the 60-frame buffer for minutes.
+     - **Tab Background Throttling**: Browser `requestAnimationFrame` pauses when tab is unfocused.
+  3. Formulated diagnostic report and proposed solution (idle gap thresholding / PTS delta calculation).
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Present diagnosis and proposed fix to the user.
+
+---
+
+### Entry 64
+- **Timestamp:** 2026-10-03T17:28:30+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Unable to render rich display
+
+  Parse error on line 10:
+  ...oder -->|VideoFrame (latest-wins)| Canva
+  -----------------------^
+  Expecting 'SQE', 'DOUBLECIRCLEEND', 'PE', '-)', 'STADIUMEND', 'SUBROUTINEEND', 'PIPE', 'CYLINDEREND', 'DIAMOND_STOP', 'TAGEND', 'TRAPEND', 'INVTRAPEND', 'UNICODE_TEXT', 'TEXT', 'TAGSTART', got 'PS'
+
+  For more information, see https://docs.github.com/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams#creating-mermaid-diagrams
+  ```
+- **Response & Actions Taken (Fixed Mermaid Syntax Error in Architecture Diagram):**
+  1. Located parse error in [`docs/architecture.md`](docs/architecture.md#L21) where unquoted parentheses `(latest-wins)` in flowchart edge label `-->|VideoFrame (latest-wins)| Canvas` caused Mermaid to treat `(` as a parenthesis shape delimiter token (`PS`).
+  2. Identified downstream parsing failures on lines 53-54 (`(H.264 Annex B)` and `(Binary Events)`).
+  3. Enclosed all edge labels containing special characters in double quotes: `-->|"VideoFrame (latest-wins)"|`, `-->|"0x00 Video NALs"|`, `<==>|"Single Binary WebSocket"|`, and `<-->|"TCP #1 Video Socket (H.264 Annex B)"|`.
+  4. Verified all 7 Mermaid diagrams across `docs/architecture.md`, `docs/with-more-time.md`, and `IMPLEMENTATION_PLAN.md` using automated Mermaid parser in Node.js/JSDOM harness (all diagrams passed).
+- **Errors / Failures Encountered:**
+  - Initial Mermaid parse test in Node.js required JSDOM mock environment for DOMPurify hook initialization.
+- **User Decision / Next Step:**
+  - Resolved diagram rendering syntax error.

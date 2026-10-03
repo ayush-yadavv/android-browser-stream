@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { calculateJitter, calculatePercentile, calculateStatsSummary } from './useLatencyStats';
+import {
+  calculateJitter,
+  calculatePercentile,
+  calculateStatsSummary,
+  MAX_STREAMING_INTERVAL_MS,
+} from './useLatencyStats';
 
 describe('useLatencyStats', () => {
   describe('calculateJitter', () => {
@@ -15,6 +20,24 @@ describe('useLatencyStats', () => {
       // Jittery intervals
       const jitter = calculateJitter([10, 20, 15, 25]);
       expect(jitter).toBeGreaterThan(0);
+    });
+
+    it('filters out idle pauses and tab sleep intervals exceeding maxIntervalMs', () => {
+      // 60 FPS frames interspersed with a 3000ms idle pause
+      const intervalsWithPause = [16.6, 16.7, 16.5, 3000, 16.6, 16.8];
+
+      // Without threshold: 3000ms pause blows up jitter to hundreds of ms (>1000ms)
+      const naiveJitter = calculateJitter(intervalsWithPause);
+      expect(naiveJitter).toBeGreaterThan(1000);
+
+      // With MAX_STREAMING_INTERVAL_MS (200ms): idle pause is filtered out, preserving active jitter
+      const filteredJitter = calculateJitter(intervalsWithPause, MAX_STREAMING_INTERVAL_MS);
+      expect(filteredJitter).toBeCloseTo(0.1, 1);
+      expect(filteredJitter).toBeLessThan(1.0);
+    });
+
+    it('returns 0 when all intervals represent idle pauses (> maxIntervalMs)', () => {
+      expect(calculateJitter([2500, 3000, 5000], MAX_STREAMING_INTERVAL_MS)).toBe(0);
     });
   });
 

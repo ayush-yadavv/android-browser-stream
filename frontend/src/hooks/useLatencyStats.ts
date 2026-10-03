@@ -35,14 +35,27 @@ export interface LatencyStats {
 }
 
 /**
- * Calculates standard deviation (jitter) of inter-frame arrival intervals.
+ * Maximum threshold for consecutive inter-frame interval during active streaming (ms).
+ * Intervals > 200ms indicate a static screen or user pause between touches (scrcpy VFR behavior),
+ * which should not pollute active streaming frame pacing jitter calculations.
  */
-export function calculateJitter(intervals: number[]): number {
-  if (intervals.length < 2) return 0;
+export const MAX_STREAMING_INTERVAL_MS = 200;
 
-  const mean = intervals.reduce((acc, val) => acc + val, 0) / intervals.length;
+/**
+ * Calculates standard deviation (jitter) of inter-frame arrival intervals.
+ * Automatically filters out non-positive and idle pause intervals (> maxIntervalMs) if specified.
+ */
+export function calculateJitter(intervals: number[], maxIntervalMs?: number): number {
+  const filtered =
+    maxIntervalMs !== undefined && maxIntervalMs > 0
+      ? intervals.filter((val) => val > 0 && val <= maxIntervalMs)
+      : intervals;
+
+  if (filtered.length < 2) return 0;
+
+  const mean = filtered.reduce((acc, val) => acc + val, 0) / filtered.length;
   const variance =
-    intervals.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / intervals.length;
+    filtered.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / filtered.length;
 
   return Math.sqrt(variance);
 }
@@ -122,13 +135,19 @@ export function useLatencyStats() {
 
     if (lastFrameTimeRef.current > 0) {
       const interval = timestamp - lastFrameTimeRef.current;
-      frameIntervalsRef.current.push(interval);
-      if (frameIntervalsRef.current.length > 60) {
-        frameIntervalsRef.current.shift();
-      }
+      // Filter out static screen idle pauses and browser background pauses (>200ms)
+      if (interval <= MAX_STREAMING_INTERVAL_MS) {
+        frameIntervalsRef.current.push(interval);
+        if (frameIntervalsRef.current.length > 60) {
+          frameIntervalsRef.current.shift();
+        }
 
-      if (isBenchmarkingRef.current) {
-        benchmarkFrameIntervalsRef.current.push(interval);
+        if (isBenchmarkingRef.current) {
+          benchmarkFrameIntervalsRef.current.push(interval);
+        }
+      } else {
+        // Long pause encountered (idle screen): reset rolling interval buffer to prevent stale jitter
+        frameIntervalsRef.current = [];
       }
     }
     lastFrameTimeRef.current = timestamp;
@@ -193,8 +212,9 @@ export function useLatencyStats() {
       frameTimestampsRef.current = frameTimestampsRef.current.filter((t) => t >= cutoff);
       const currentFps = frameTimestampsRef.current.length;
 
-      // Calculate jitter from recent frame intervals
-      const currentJitter = calculateJitter(frameIntervalsRef.current);
+      // Calculate jitter from recent frame intervals if actively streaming (fps > 0)
+      const currentJitter =
+        currentFps > 0 ? calculateJitter(frameIntervalsRef.current, MAX_STREAMING_INTERVAL_MS) : 0;
 
       // Calculate bitrate (kilobits per second)
       const currentBitrate = Math.round((bytesInWindowRef.current * 8) / 1000);
@@ -223,7 +243,7 @@ export function useLatencyStats() {
           isBenchmarkingRef.current = false;
 
           const benchRttSummary = calculateStatsSummary(benchmarkRttsRef.current);
-          const benchJitter = calculateJitter(benchmarkFrameIntervalsRef.current);
+          const benchJitter = calculateJitter(benchmarkFrameIntervalsRef.current, MAX_STREAMING_INTERVAL_MS);
           const benchFrames = totalFramesRef.current - benchmarkStartFramesRef.current;
           const benchDurationSec = totalDuration / 1000;
           const benchFps = Math.round(benchFrames / benchDurationSec);

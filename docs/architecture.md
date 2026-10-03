@@ -17,10 +17,10 @@ flowchart TB
         InputHook["useInputCapture (Pointer / Scroll / Keyboard)"]
         HUD["LatencyHud (FPS / Jitter / RTT / Bitrate)"]
 
-        WSClient -->|0x00 Video NALs| Decoder
-        Decoder -->|VideoFrame (latest-wins)| Canvas
-        InputHook -->|0x02 Scrcpy Control Payloads| WSClient
-        WSClient <-->|0x03 Timestamp Ping/Pong| HUD
+        WSClient -->|"0x00 Video NALs"| Decoder
+        Decoder -->|"VideoFrame (latest-wins)"| Canvas
+        InputHook -->|"0x02 Scrcpy Control Payloads"| WSClient
+        WSClient <-->|"0x03 Timestamp Ping/Pong"| HUD
     end
 
     subgraph Server["Go Backend Service (Clean Architecture)"]
@@ -49,9 +49,9 @@ flowchart TB
         ScrcpyServer --> AndroidFramework
     end
 
-    WSClient <==>|Single Binary WebSocket| GinAPI
-    RelayUsecase <-->|TCP #1 Video Socket (H.264 Annex B)| ScrcpyServer
-    RelayUsecase <-->|TCP #2 Control Socket (Binary Events)| ScrcpyServer
+    WSClient <==>|"Single Binary WebSocket"| GinAPI
+    RelayUsecase <-->|"TCP #1 Video Socket (H.264 Annex B)"| ScrcpyServer
+    RelayUsecase <-->|"TCP #2 Control Socket (Binary Events)"| ScrcpyServer
 ```
 
 ---
