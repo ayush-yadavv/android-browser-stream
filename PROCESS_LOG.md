@@ -1518,3 +1518,135 @@
   - Initial Mermaid parse test in Node.js required JSDOM mock environment for DOMPurify hook initialization.
 - **User Decision / Next Step:**
   - Resolved diagram rendering syntax error.
+
+### Entry 65
+- **Timestamp:** 2026-10-03T17:34:30+05:30
+- **User Prompt (Verbatim):**
+  ```
+  redesign home page as per @[DESIGN.md] and # Laws of UX
+
+  A collection of best practices that designers can consider when building user interfaces, compiled by Jon Yablonski (https://lawsofux.com/).
+
+  ## Aesthetic-Usability Effect
+  Users often perceive aesthetically pleasing design as design that’s more usable.
+
+  ## Choice Overload
+  The tendency for people to get overwhelmed when they are presented with a large number of options, often used interchangeably with the term paradox of choice.
+
+  ## Chunking
+  A process by which individual pieces of an information set are broken down and then grouped together in a meaningful whole.
+
+  ## Cognitive Bias
+  A systematic error of thinking or rationality in judgment that influence our perception of the world and our decision-making ability.
+
+  ## Cognitive Load
+  The amount of mental resources needed to understand and interact with an interface.
+
+  ## Doherty Threshold
+  Productivity soars when a computer and its users interact at a pace (<400ms) that ensures that neither has to wait on the other.
+
+  ## Fitts’s Law
+  The time to acquire a target is a function of the distance to and size of the target.
+
+  ## Flow
+  The mental state in which a person performing some activity is fully immersed in a feeling of energized focus, full involvement, and enjoyment in the process of the activity.
+
+  ## Goal-Gradient Effect
+  The tendency to approach a goal increases with proximity to the goal.
+
+  ## Hick’s Law
+  The time it takes to make a decision increases with the number and complexity of choices.
+
+  ## Jakob’s Law
+  Users spend most of their time on other sites. This means that users prefer your site to work the same way as all the other sites they already know.
+
+  ## Law of Common Region
+  Elements tend to be perceived into groups if they are sharing an area with a clearly defined boundary.
+
+  ## Law of Proximity
+  Objects that are near, or proximate to each other, tend to be grouped together.
+
+  ## Law of Prägnanz
+  People will perceive and interpret ambiguous or complex images as the simplest form possible, because it is the interpretation that requires the least cognitive effort of us.
+
+  ## Law of Similarity
+  The human eye tends to perceive similar elements as a complete picture, shape, or group, even if those elements are separated.
+
+  ## Law of Uniform Connectedness
+  Elements that are visually connected are perceived as more related than elements with no connection.
+
+  ## Mental Model
+  A compressed model based on what we think we know about a system and how it works.
+
+  ## Miller’s Law
+  The average person can only keep 7 (plus or minus 2) items in their working memory.
+
+  ## Occam’s Razor
+  Among competing hypotheses that predict equally well, the one with the fewest assumptions should be selected.
+
+  ## Paradox of the Active User
+  Users never read manuals but start using the software immediately.
+
+  ## Pareto Principle
+  The Pareto principle states that, for many events, roughly 80% of the effects come from 20% of the causes.
+
+  ## Parkinson’s Law
+  Any task will inflate until all of the available time is spent.
+
+  ## Peak-End Rule
+  People judge an experience largely based on how they felt at its peak and at its end, rather than the total sum or average of every moment of the experience.
+
+  ## Postel’s Law
+  Be liberal in what you accept, and conservative in what you send.
+
+  ## Selective Attention
+  The process of focusing our attention only to a subset of stimuli in an environment usually those related to our goals.
+
+  ## Serial Position Effect
+  Users have a propensity to best remember the first and last items in a series.
+
+  ## Tesler’s Law
+  Tesler's Law, also known as The Law of Conservation of Complexity, states that for any system there is a certain amount of complexity which cannot be reduced.
+
+  ## Von Restorff Effect
+  The Von Restorff effect, also known as The Isolation Effect, predicts that when multiple similar objects are present, the one that differs from the rest is most likely to be remembered.
+
+  ## Working Memory
+  A cognitive system that temporarily holds and manipulates information needed to complete tasks.
+
+  ## Zeigarnik Effect
+  People remember uncompleted or interrupted tasks better than completed tasks.
+  ```
+- **Response & Actions Taken (Redesigned Home Page as per DESIGN.md and Laws of UX):**
+  1. Synthesized design specifications from [`DESIGN.md`](DESIGN.md) (near-black canvas `#080808`, poster typography with negative tracking `-0.05em`, white pill primary CTAs, Level 2 light-edge surfaces, and exactly two atmospheric spotlight cards) with Jon Yablonski's Laws of UX.
+  2. Updated design tokens in [`frontend/tailwind.config.ts`](frontend/tailwind.config.ts) and [`frontend/src/components/ui/card.tsx`](frontend/src/components/ui/card.tsx) with `surface-1: #121214`, `surface-2: #1c1c1f`, `surface-3: #26262a`, `hairline: rgba(255,255,255,0.08)`, and `rounded-3xl` for atmospheric spotlight panels.
+  3. Redesigned [`frontend/src/components/SessionManager.tsx`](frontend/src/components/SessionManager.tsx):
+     - **Fitts's Law & Von Restorff Effect**: Centered, oversized white pill CTA (`h-14`, high contrast, radiant glow) as the isolated prominent primary action.
+     - **Doherty Threshold (<400ms feedback)**: Instant keyboard shortcut (`Enter`/`Space`) for one-tap launch, reactive status micro-states, and sub-300ms pre-warmed standby indicator.
+     - **Hick's Law & Choice Overload**: Replaced floating technical checkboxes with a 3-choice segmented preset pill (Standard 60 FPS, Kiosk Lockdown, fMP4 Recording) with default pre-selected.
+     - **Chunking, Law of Common Region & Proximity**: Structured home page into 5 bounded bands: (1) Hero & Launchpad, (2) Active/Past Sessions Dashboard, (3) Atmospheric Spotlight Cards, (4) Hardware & Latency Spec Strip, (5) Interactive Clean Architecture Tabs.
+     - **Zeigarnik Effect & Peak-End Rule**: Prominently elevated unfinished/live streaming sessions to the top with a pulsating beacon and 1-click "Resume Session" button.
+     - **Aesthetic-Usability Effect & DESIGN.md Spec**: Curated exactly two atmospheric cards (Violet Spotlight for WebCodecs GPU acceleration and Sunset Orange for zero-transcode sandboxing).
+  4. Verified build and tests: `tsc && vite build` succeeded cleanly (zero errors); all 64 Vitest tests passing (`npm test`).
+- **Errors / Failures Encountered:**
+  - Initial `tsc` check failed on unused icon imports in `SessionManager.tsx`; removed unused imports and rebuilt cleanly.
+- **User Decision / Next Step:**
+  - Present redesign summary and implementation details to user.
+
+### Entry 66
+- **Timestamp:** 2026-10-03T17:39:45+05:30
+- **User Prompt (Verbatim):**
+  ```
+  recording is a additional feature which can be added to standard and kiosk launch present
+  ```
+- **Response & Actions Taken (Decoupled Recording as Add-on Feature Toggle):**
+  1. Refactored launch configuration controls in [`frontend/src/components/SessionManager.tsx`](frontend/src/components/SessionManager.tsx):
+     - Separated base environment mode selection (`standard` vs `kiosk`) into a distinct 2-option segmented pill selector.
+     - Extracted `recordSession` into an independent feature add-on toggle pill with an illuminated LED status indicator (`ON` / `OFF`) and tooltip.
+     - Enabled users to combine recording with *either* Standard Android or Kiosk Lockdown mode.
+     - Updated dynamic contextual helper explanation to reflect both the selected base mode and recording status.
+  2. Verified build and tests: `tsc && vite build` succeeded cleanly without errors; all 64 Vitest tests passing (`npm test`).
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Present update to user.

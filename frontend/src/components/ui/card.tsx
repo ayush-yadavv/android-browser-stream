@@ -8,23 +8,23 @@ const Card = React.forwardRef<
   }
 >(({ className, variant = 'default', ...props }, ref) => {
   const variantStyles = {
-    default: 'bg-surface-1 border-hairline',
-    'surface-2': 'bg-surface-2 border-hairline',
+    default: 'bg-surface-1 border-hairline rounded-2xl shadow-sm',
+    'surface-2': 'bg-surface-2 border-hairline rounded-2xl shadow-sm',
     'spotlight-violet':
-      'bg-gradient-to-br from-purple-900/35 via-surface-1 to-canvas border-purple-500/25 shadow-2xl shadow-purple-950/20 rounded-2xl',
+      'bg-gradient-to-br from-purple-950/40 via-surface-1 to-canvas border-purple-500/25 shadow-2xl shadow-purple-950/20 rounded-3xl',
     'spotlight-magenta':
-      'bg-gradient-to-br from-pink-900/35 via-surface-1 to-canvas border-pink-500/25 shadow-2xl shadow-pink-950/20 rounded-2xl',
+      'bg-gradient-to-br from-pink-950/40 via-surface-1 to-canvas border-pink-500/25 shadow-2xl shadow-pink-950/20 rounded-3xl',
     'spotlight-orange':
-      'bg-gradient-to-br from-amber-900/30 via-surface-1 to-canvas border-amber-500/25 shadow-2xl shadow-amber-950/20 rounded-2xl',
+      'bg-gradient-to-br from-amber-950/40 via-surface-1 to-canvas border-amber-500/25 shadow-2xl shadow-amber-950/20 rounded-3xl',
     'spotlight-coral':
-      'bg-gradient-to-br from-rose-900/35 via-surface-1 to-canvas border-rose-500/25 shadow-2xl shadow-rose-950/20 rounded-2xl',
+      'bg-gradient-to-br from-rose-950/40 via-surface-1 to-canvas border-rose-500/25 shadow-2xl shadow-rose-950/20 rounded-3xl',
   };
 
   return (
     <div
       ref={ref}
       className={cn(
-        'rounded-xl border text-ink shadow-sm transition-all',
+        'border text-ink transition-all',
         variantStyles[variant],
         className
       )}
