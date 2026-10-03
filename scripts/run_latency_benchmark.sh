@@ -123,6 +123,8 @@ if command -v adb > /dev/null 2>&1; then
     if [[ -n "${ACTIVE_DEVICES}" ]]; then
         ADB_DEVICE="${ACTIVE_DEVICES}"
         echo -e "${GREEN}✔ Detected ADB target for SurfaceFlinger profiling: ${BOLD}${ADB_DEVICE}${RESET}"
+        echo -e "${CYAN}▶ Launching AOSP DeskClock stopwatch for Visual Loopback verification...${RESET}"
+        adb -s "${ADB_DEVICE}" shell am start -n com.android.deskclock/.DeskClock > /dev/null 2>&1 || true
     fi
 fi
 

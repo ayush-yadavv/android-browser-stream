@@ -105,11 +105,10 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 		return fmt.Errorf("adb forward port %d: %w", videoPort, err)
 	}
 
-	// 3. Check if target device is already known to lack support for requested codec
+	// 3. Check if target device supports requested codec; default to H.264 if unsupported
 	if s.codec != domain.CodecH264 {
-		key := fmt.Sprintf("%s:%s", s.serial, s.codec)
-		if unsupported, ok := deviceUnsupportedCodecs.Load(key); ok && unsupported.(bool) {
-			log.Printf("Device %s lacks encoder for %s (cached); defaulting to %s", s.serial, s.codec, domain.CodecH264)
+		if !s.checkDeviceEncoderSupport(ctx, s.codec) {
+			log.Printf("Device %s lacks encoder for %s; defaulting to %s", s.serial, s.codec, domain.CodecH264)
 			s.codec = domain.CodecH264
 		}
 	}
@@ -118,6 +117,19 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 	targetAudio := s.audio
 
 	err := s.launchAndConnect(ctx, videoPort, targetCodec, targetAudio)
+
+	// If initial launch with a non-H264 codec (e.g. AV1 or H265) fails due to missing device encoder,
+	// immediately fall back to universal H.264 without retrying audio on an unsupported codec.
+	if err != nil && targetCodec != domain.CodecH264 {
+		log.Printf("scrcpy-server launch failed for codec %s (%v); falling back to universal %s", targetCodec, err, domain.CodecH264)
+		deviceUnsupportedCodecs.Store(fmt.Sprintf("%s:%s", s.serial, targetCodec), true)
+		s.cleanupProcess()
+		s.codec = domain.CodecH264
+		targetCodec = domain.CodecH264
+		err = s.launchAndConnect(ctx, videoPort, domain.CodecH264, targetAudio)
+	}
+
+	// If launch failed with audio enabled (even on H.264), retry with audio disabled
 	if err != nil && targetAudio {
 		log.Printf("scrcpy-server launch failed with audio=true (%v); retrying with audio=false", err)
 		s.cleanupProcess()
@@ -125,26 +137,44 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 		err = s.launchAndConnect(ctx, videoPort, targetCodec, false)
 	}
 
-	if err != nil && targetCodec != domain.CodecH264 {
-		log.Printf("scrcpy-server launch failed for codec %s (%v); falling back to universal %s", targetCodec, err, domain.CodecH264)
-		deviceUnsupportedCodecs.Store(fmt.Sprintf("%s:%s", s.serial, targetCodec), true)
-		s.cleanupProcess()
-		s.codec = domain.CodecH264
-		s.audio = targetAudio
-		err = s.launchAndConnect(ctx, videoPort, domain.CodecH264, targetAudio)
-		if err != nil && targetAudio {
-			log.Printf("scrcpy-server launch failed for H.264 with audio=true (%v); retrying with audio=false", err)
-			s.cleanupProcess()
-			s.audio = false
-			err = s.launchAndConnect(ctx, videoPort, domain.CodecH264, false)
-		}
-	}
-
 	if err != nil {
 		s.Close()
 	}
 
 	return err
+}
+
+func (s *Server) checkDeviceEncoderSupport(ctx context.Context, codec domain.VideoCodec) bool {
+	if codec == domain.CodecH264 {
+		return true
+	}
+	key := fmt.Sprintf("%s:%s", s.serial, codec)
+	if unsupported, ok := deviceUnsupportedCodecs.Load(key); ok && unsupported.(bool) {
+		return false
+	}
+
+	// Probe device media codecs XML for encoders matching the requested codec
+	var pattern string
+	switch codec {
+	case domain.CodecAV1:
+		pattern = "av01|av1"
+	case domain.CodecH265:
+		pattern = "hevc"
+	default:
+		return true
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	defer cancel()
+	cmd := s.adb.Shell(probeCtx, s.serial, "sh", "-c",
+		fmt.Sprintf("grep -E -s -i 'MediaCodec.*name=.*encoder.*type=\"video/(%s)\"|MediaCodec.*name=.*(%s).*encoder' /system/etc/media_codecs*.xml /vendor/etc/media_codecs*.xml /apex/com.android.media.swcodec/etc/media_codecs*.xml /etc/media_codecs*.xml", pattern, pattern))
+	out, err := cmd.Output()
+	if err != nil || len(out) == 0 {
+		log.Printf("Device %s media_codecs probe: no encoder found for %s; caching as unsupported", s.serial, codec)
+		deviceUnsupportedCodecs.Store(key, true)
+		return false
+	}
+	return true
 }
 
 func (s *Server) launchAndConnect(ctx context.Context, videoPort int, codec domain.VideoCodec, audioEnabled bool) error {
@@ -312,6 +342,19 @@ func (s *Server) cleanupProcess() {
 		_ = s.cmd.Process.Kill()
 		s.cmd = nil
 	}
+
+	// CRITICAL: Host adb process kill does not terminate the remote child process inside Android.
+	// Explicitly terminate any lingering remote scrcpy-server process to release the localabstract:scrcpy socket,
+	// preventing exit status 134 (Aborted / core dumped) on immediate retries.
+	// We specifically target com.genymobile.scrcpy.Server rather than generic app_process to prevent killing
+	// Android's system Zygote daemon.
+	if s.adb != nil && s.serial != "" {
+		killCtx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		_ = s.adb.Shell(killCtx, s.serial, "pkill", "-9", "-f", "com.genymobile.scrcpy.Server").Run()
+		cancel()
+	}
+
+	time.Sleep(200 * time.Millisecond)
 }
 
 // Close terminates process and all TCP socket connections (video, audio, control).

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"log"
+	"os"
 	"time"
 
 	"github.com/spf13/viper"
@@ -35,5 +36,15 @@ func NewEnv() *Env {
 	if err := viper.Unmarshal(&env); err != nil {
 		log.Fatalf("unable to decode into struct, %v", err)
 	}
+
+	// Fall back to backend/bin/scrcpy-server if executed from repository root
+	if env.ScrcpyBinPath == "bin/scrcpy-server" {
+		if _, err := os.Stat("bin/scrcpy-server"); os.IsNotExist(err) {
+			if _, err2 := os.Stat("backend/bin/scrcpy-server"); err2 == nil {
+				env.ScrcpyBinPath = "backend/bin/scrcpy-server"
+			}
+		}
+	}
+
 	return &env
 }

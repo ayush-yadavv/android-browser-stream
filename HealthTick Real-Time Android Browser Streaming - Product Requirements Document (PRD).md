@@ -1,74 +1,144 @@
-### Product Requirements Document: HealthTick Real-Time Android Browser Streaming
+# Product Requirements Document: HealthTick Real-Time Android Browser Streaming
 
-#### 1\. Product Vision & Strategic Constraints
+## 1. Product Vision & Strategic Constraints
 
-The mission is to architect and deploy a high-performance system capable of streaming a live Android OS to a web browser within a high-pressure 72-hour recruitment cycle. This project is designed to evaluate a candidate's mastery of real-time systems, network proxies, and low-level protocol management.The following fundamental constraints are non-negotiable:
+The mission is to architect and deploy a high-performance system capable of streaming an interactive, live Android OS into a modern web browser within a 72-hour recruitment evaluation window. The project evaluates mastery across real-time systems, network proxies, video pipelines, container orchestration, and low-level protocol management.
 
-* **Licensing:**  100% Free and Open-Source Software (FOSS). The solution must rely on open standards (e.g., GPL-3.0) and avoid proprietary dependencies.  
-* **Infrastructure:**  Mandatory Cloud VM hosting. This constraint is specifically intended to test the candidate’s ability to manage network tunneling, buffer management, and Linux environment configuration.  
-* **Commercial SaaS Prohibition:**  Explicitly prohibit commercial SDKs or platforms such as Appetize.io.  
-* **Timeline:**  A fixed, 72-hour development window from inception to delivery.  
-* **Deployment Status:**  While local development is expected, the  **Final Success Criterion**  is a stable deployment on a Cloud VM accessible via a Public HTTPS URL.
+The following constraints are non-negotiable:
 
-#### 2\. Scope & Technical Boundaries
+* **Licensing & FOSS:** 100% Free and Open-Source Software (FOSS). Core solution must rely on open-source software and open standards (e.g., GPL-3.0, Apache-2.0).
+* **Commercial SaaS Prohibition:** Absolutely no commercial streaming SDKs, paid emulator platforms, or hosted remote-device services (e.g., Appetize.io, AWS Device Farm, Genymotion SaaS).
+* **Infrastructure & Hosting:** Solution must be deployed to a Cloud VM (e.g., AWS, GCP, Azure, Hetzner, DigitalOcean) and accessible via a public HTTPS URL. Generic cloud infrastructure (VMs, containers, storage, networking) may be free or paid.
+* **Architectural Freedom:** Open-ended solution design. Candidates choose the languages, libraries, and framework architecture, provided dependencies remain FOSS.
+* **Timeline & Time Tracking:** Fixed 72-hour completion window. Candidates must track and report their actual hours spent upon final submission.
 
-To maintain engineering velocity, we are strictly defining the boundaries of this technical assessment:| In-Scope | Explicitly Out-of-Scope || \------ | \------ || Support for 2 to 3 simultaneous isolated Android instances. | Multi-region clusters or global CDN distribution. || Single-machine hosting on a Cloud VM. | Automated horizontal autoscaling (K8s/HPA). || Real-time mirroring and Normalized Input Forwarding. | Enterprise-grade hardware load balancers. || Secure Context (HTTPS) implementation for WebCodecs. | iOS support or Chrome DevTools Protocol proxying. |
+---
 
-#### 3\. Functional Requirements (30% Weighting)
+## 2. Scope & Technical Boundaries
 
-The core engineering objectives focus on protocol efficiency and input precision.
+To maintain engineering velocity and avoid over-engineering, technical boundaries are strictly bounded:
 
-* **FR-1: Continuous Real-Time Streaming:**  The architecture must provide a persistent stream without manual refreshes. While H.264 Baseline support is the minimum requirement for compatibility, the pipeline should be "codec-agnostic," designed to support modern encoders like H.265 or AV1 as the hardware allows.  
-* **FR-2: Normalized Input Forwarding:**  Capture and forward tap, swipe, and scroll events. Coordinates must be normalized to match native device resolution. A senior implementation must utilize  **i16-fixed-point scroll**  values and provide a UI toggle between  **D-pad and Touch modes**  to handle different app interaction models (e.g., Leanback TV apps vs. standard mobile apps).  
-* **FR-3: Latency Benchmarking:**  Implementation of a standardized benchmarking methodology. The gold standard for this requirement is a  **"Visual Loopback" test** : displaying a millisecond clock on the Android OS and comparing it to the rendered frame in the browser to quantify total action-to-render delay.  
-* **FR-4: Reproducible Execution:**  The system must be launchable via a single-machine setup driven by automated scripts (e.g., docker-compose.yml or start.sh).  
-* **FR-5: Public Accessibility:**  The deployment must be reachable via a public browser-accessible link. Candidates must ensure the stream functions in a remote environment, navigating the complexities of public IPs and firewall rules.
+| In-Scope | Explicitly Out-of-Scope |
+| :--- | :--- |
+| Support for 2 to 3 simultaneous isolated Android instances on a single host machine. | Multi-region clusters or global CDN distribution. |
+| Single-machine Cloud VM deployment with automated setup scripts. | Automated horizontal autoscaling (Kubernetes HPA, Nomad clusters). |
+| Real-time video mirroring and normalized input forwarding (touch, gestures, scroll, and keyboard typing). | Enterprise-grade hardware load balancers. |
+| Secure Context (HTTPS/WSS) reverse proxy configuration for WebCodecs. | iOS device virtualization or Chrome DevTools Protocol (CDP) proxies. |
 
-#### 4\. Optional Bonus Features (25% Weighting)
+> **Scoping Principle:** A simple, resilient design that works reliably is strictly preferred over a complex system that is half-finished. Core requirements combined with 1 or 2 deeply implemented bonus features constitute a top-tier submission.
 
-High-value extensions that demonstrate advanced systems architectural thinking.**BR-1: Isolated Instance per User**   **Success Definition:**  Implementation of a session-management layer ensuring zero state or file leakage between isolated user environments.**BR-2: On-Demand Lifecycle Management**   **Success Definition:**  Orchestration logic that triggers the spin-up of an Android instance upon user handshake and executes a cleanup/termination sequence when the session becomes idle.**BR-3: Two-Way Clipboard Synchronization**   **Success Definition:**  Implementation of computer-to-device text sync. This requires integration with STFService.apk or specific ADB shell commands to bridge the local and remote clipboards.**BR-4: Kiosk Mode Enforcement**   **Success Definition:**  Server-side enforcement locking the streaming session to a single application, preventing user escape to the OS settings or other unauthorized apps.**BR-5: Automated Session Recording**   **Success Definition:**  Server-side video capture where the stream is multiplexed and simultaneously piped to a storage-backed file tied to a unique Session ID.
+---
 
-#### 5\. AI Compliance & Audit Trail (25% Weighting)
+## 3. Core Functional Requirements (30% Evaluation Weight)
 
-As a senior technical assessment, the use of AI must be transparent and demonstrate critical problem-solving.
+### FR-1: Continuous Real-Time Streaming
+* The browser must display a live, persistent mirror of the running Android OS without manual page refreshes.
+* Stream delivery must be sub-second action-to-render latency. While H.264 Baseline is the compatibility standard, the pipeline should be designed codec-agnostically to support modern encoders (H.265/AV1) where hardware acceleration permits.
+* Video playback must utilize the browser's low-overhead **WebCodecs API (`VideoDecoder`)** rendered onto an HTML5 Canvas context.
 
-* **PROCESS\_LOG.md:**  An append-only file containing verbatim AI prompts with timestamps and public chat links.  
-* **Pivot Decisions:**  Documentation of instances where AI provided incorrect or suboptimal architectural advice. Candidates must explain the  *architectural why*  behind their decision to pivot.  
-* **Decision Summary:**  A distinct section in the documentation summarizing high-level "Human vs. AI" contributions. This should highlight unique engineering logic (e.g., custom protocol handling) vs. AI-generated boilerplate.
+### FR-2: Normalized Input Forwarding (Touch, Scroll, & Keyboard Typing)
+* **Touch & Gestures:** Capture and forward tap, swipe, multi-pointer moves, and touch release events.
+* **Coordinate Normalization:** Coordinates must be mathematically mapped from the client's rendered viewport to the native Android display resolution ($X \in [0, W]$, $Y \in [0, H]$), preserving aspect ratio with proper letterbox/pillarbox compensation across arbitrary browser window resizing.
+* **Scroll & Navigation:** Transmit mouse-wheel scroll events using 16-bit signed fixed-point integer serialization (`i16-fixed-point`). Virtual navigation actions (Back, Home, App Switch) must be accessible.
+* **Keyboard Typing & Text Injection:** The user must be able to type naturally into Android text fields from their physical keyboard or an in-browser text toolbar. Keystrokes must map browser `KeyboardEvent.code` to Android `KeyEvent.KEYCODE_*` codes and forward UTF-8 text strings directly into active Android input fields.
 
-#### 6\. Mandatory Deliverables Checklist
+### FR-3: Latency Benchmarking & Metrics Reporting
+* **Objective Measurement:** Measure glass-to-glass delay between a user action and visible screen update.
+* **Standard Methodology:** Implement a reproducible benchmarking method, such as the **Visual Loopback Test** (rendering a high-precision millisecond counter on the Android OS and comparing it against the captured browser canvas frame).
+* **Documented Reporting:** The measurement methodology must be explained in the documentation, and actual measured latency figures (action-to-render delay, network RTT, framerate, and jitter) must be reported in the submission deliverables and/or an in-app telemetry HUD.
 
-1.   **Public Git Repository:**  Complete source code and commit history.  
-2.   **Deployed Public Link:**  A live testing URL for the evaluation team.  
-3.   **Narrated Demo Video:**  3–5 minutes, unedited, demonstrating the live stream and input.  
-4.   **Project README.md:**  Setup instructions, host location, and documented limits.  
-5.   **Architecture Write-Up:**  1–2 pages explaining the data flow and protocol choices.  
-6.   **"What Went Wrong" Post-Mortem:**  Analysis of technical hurdles encountered.  
-7.   **"With More Time" Roadmap:**  Strategy for scaling, security, and enterprise features.  
-8.   **AI Compliance Log (**  **PROCESS\_LOG.md**  **):**  Chronological audit of AI usage.  
-9.   **Human vs. AI Decision Summary:**  Clarity on the candidate’s unique value-add.
+### FR-4: Reproducible Single-Machine Execution
+* The entire system (backend, frontend, Android container engine, and proxy services) must run on a single machine.
+* Must provide clean, automated setup scripts (`run_local.sh`, `docker-compose.yml`, or equivalent) allowing an evaluator to reproduce the working environment without ad-hoc manual interventions.
 
-#### 7\. Evaluation Matrix & Engineering Quality
+### FR-5: Public Accessibility & Cloud Deployment
+* The backend and frontend must run continuously on a remote Cloud VM, not on the candidate's personal computer.
+* Must be reachable via a public, secure HTTPS/WSS link accessible by evaluators at any time without special client installations.
 
-Criteria,Weighting  
-Core Functionality,30%  
-Bonus Feature Depth,25%  
-Problem Solving & AI Record,25%  
-Engineering Quality & Documentation,20%
+---
 
-##### Senior Engineering Best Practices
+## 4. Bonus / Good-to-Have Requirements (25% Evaluation Weight)
 
-Senior candidates are expected to handle complex "Tricky Cases" mentioned in the source context:
+*Judged on architectural depth, reliability, and security correctness rather than mere presence. Implementing 1 or 2 bonuses thoroughly is superior to attempting all 5 superficially.*
 
-* **Edge Case Handling:**  Explicitly handle "searching with no input," "special characters like ' or &," and "window resizing" without breaking the UI or stream.  
-* **Architectural Separation:**  Strict adherence to the Single Responsibility Principle (SRP) in class structure and a clear separation between the presentation layer and the business/proxy layer.  
-* **Robustness:**  Implementation of proper Pointer-Lock API for mouse control and error-resilient demultiplexing.
+### BR-1: Dedicated Isolated Instance per User
+* **Success Definition:** A session-management orchestration layer guaranteeing that two concurrent users receive completely separate, sandboxed Android environments.
+* **Zero Leakage:** No crossover of user actions, file storage (`/sdcard`), installed APKs, OS settings, clipboard data, or container ports between users.
 
-#### 8\. Technical Implementation Guidance
+### BR-2: On-Demand Lifecycle Management & Leak Prevention
+* **Success Definition:** Android instances are provisioned dynamically when a user initiates a session and decommissioned automatically upon session termination or inactivity.
+* **No Pre-allocation Waste:** Nothing is reserved per user in advance.
+* **Abandoned Session Cleanup:** Robust server-side cleanup policies must detect abandoned sessions (closed browser tabs, network dropouts, crashed sockets) and reclaim containers, ADB forwarding tunnels, and port allocations without leaking server resources.
 
-The recommended architectural flow is:  **Cloud Node.js Server → ADB Proxy →**  **scrcpy-server**  **(on device) → WebSocket Multiplexing → Browser WebCodecs.**
+### BR-3: Two-Way Bidirectional Clipboard Synchronization
+* **Client-to-Device Sync:** Text copied on the user's host computer is seamlessly pasted into the Android device's clipboard.
+* **Device-to-Client Sync:** Text copied inside the Android OS is captured and synced back to the user's browser clipboard.
+* **Mechanism:** Integration with low-level ADB clipboard monitors, STFService, or scrcpy clipboard synchronization packets.
 
-* **Protocol Management:**  To ensure protocol efficiency, you must implement a  **1-byte channel prefix**  for multiplexing the video, audio, and control sockets into the single WebSocket stream. This prevents protocol overhead and simplifies demultiplexing at the client.  
-* **Decoding Strategy:**  Use the  **WebCodecs API (VideoDecoder)**  for low-latency H.264/H.265 rendering. Do not rely on high-latency WASM fallbacks.  
-* **Secure Context Requirement:**  WebCodecs is restricted to  **Secure Contexts** . While http\://localhost is a valid exception during development, remote Cloud VM streaming will fail with a  **Browser Error 1006**  if the connection is not served over HTTPS. Candidates must implement a TLS/SSL solution (e.g., reverse proxy) for the final deployment.
+### BR-4: Restricted Access / Kiosk Mode Enforcement
+* **Success Definition:** Locking the streaming session to a single selected application, preventing the user from escaping to other apps, system settings, or OS-level controls.
+* **App Selection & Justification:** Candidate must explicitly document **which app was chosen and why**.
+* **Defined Blocked Actions & Justification:** Candidate must define and document the **complete list of blocked actions** (e.g., `KEYCODE_HOME`, `KEYCODE_APP_SWITCH`, status bar swipe-down, notification shade expansion, intent URL navigation) and **justify why each is blocked**.
+* **Server-Side Enforcement:** Enforcement must occur server-side or at the OS protocol layer so that tampering with client-side JavaScript cannot bypass restrictions.
 
+### BR-5: Automated Session Recording, Playback & Download
+* **Success Definition:** Automatic server-side capture of each streaming session, simultaneously multiplexing the H.264 stream to a storage-backed media file tagged with the unique Session ID.
+* **In-Browser Playback:** The application must provide a playback mechanism (in-browser video player or video stream endpoint) allowing evaluators to review recorded sessions.
+* **Session Download:** The system must provide an endpoint or UI button allowing recorded sessions to be downloaded locally in a standard container format (e.g. fragmented MP4 with faststart, or WebM).
+
+---
+
+## 5. AI Compliance, Process Audit, & Autonomous Decision Trail (25% Evaluation Weight)
+
+Candidates are encouraged to leverage AI coding agents and LLMs, but must demonstrate rigorous verification, technical ownership, and transparent auditing.
+
+* **Append-Only Process Log (`PROCESS_LOG.md`):** If using an AI coding agent, maintain an append-only log in the project root. For every meaningful step, record the timestamp, exact verbatim user prompt, actions taken, errors/failures encountered, and subsequent decisions. This log must be maintained continuously and committed to the Git history.
+* **AI Chat Transcripts:** If using browser-based AI chats, provide public conversation links or exported transcripts in the repository.
+* **Autonomous Human Decisions (Written in Candidate's Own Words):** A dedicated section in the write-up detailing major architectural and algorithmic decisions made independently of AI suggestions.
+* **AI Failures & Pivot Points:** Document at least one concrete instance where the AI provided incorrect, suboptimal, or broken advice, describing how the candidate detected the error and the technical rationale for the pivot.
+* **Integrity Warning:** Do not clean up, filter, or fabricate logs. A messy, authentic record of engineering problem-solving is valued; missing or edited records will incur severe penalties.
+
+---
+
+## 6. Mandatory Deliverables Checklist
+
+| # | Deliverable | Required Content & Format |
+| :---: | :--- | :--- |
+| **1** | **Public Git Repository** | Full backend and frontend source code, automated scripts, clean commit history. |
+| **2** | **Deployed Public Link** | Live HTTPS/WSS URL accessible to evaluators with any required credentials. |
+| **3** | **Narrated Demo Video** | 3 to 5 minutes, **one continuous take without cuts**, recorded on the **live deployed Cloud VM** (no mock-ups). Must demonstrate real-time device responsiveness, walk through each built feature, and include candidate voiceover. |
+| **4** | **Project README.md** | Step-by-step local setup instructions, hosting provider and server location, documented operational limits (e.g. max concurrent sessions), and test instructions for each feature. |
+| **5** | **Architecture Write-Up** | 1 to 2 pages detailing video streaming pipeline, input forwarding, isolation mechanisms, and **a dedicated section on architectural alternatives considered and why they were rejected** (e.g., WebCodecs vs WebRTC, Redroid vs QEMU/Anbox). |
+| **6** | **"What Went Wrong" Post-Mortem** | Honest analysis of dead ends, bugs, kernel/hardware compatibility obstacles, and how they were resolved. |
+| **7** | **"With More Time" Roadmap** | Concrete engineering plan for multi-node horizontal scaling, GPU passthrough, enterprise security, and audio streaming. |
+| **8** | **AI Record (`PROCESS_LOG.md`)** | Unedited chronological log or public conversation links documenting the full AI exchange. |
+| **9** | **Human vs. AI Decision Summary** | In the candidate's own words: autonomous architectural decisions and documented AI failure recovery. |
+| **10** | **Actual Time Spent** | Explicit accounting of the total hours spent building and deploying the assignment. |
+
+---
+
+## 7. Evaluation Matrix & Scoring Breakdown
+
+| Evaluation Pillar | Weight | Focus Areas |
+| :--- | :---: | :--- |
+| **Core Functionality** | **30%** | Live stream stability, input forwarding accuracy (touch, scroll, typing), low-latency responsiveness, and rock-solid behaviour on the public deployment. |
+| **Bonus Features** | **25%** | Depth, correctness, and architectural rigor of attempted bonus features (isolation, lifecycle management, two-way clipboard, kiosk mode, session recording). |
+| **Problem Solving & Use of AI** | **25%** | Quality of research, recovery from technical dead ends, critical oversight of AI tools, and fidelity of the audit log (`PROCESS_LOG.md`). |
+| **Engineering Quality** | **10%** | Clean Architecture, separation of concerns, robust error handling, idiomatic code, concurrency safety, and leak-free resource teardown. |
+| **Communication** | **10%** | Clarity of architecture documentation, unedited video narration, and thoughtful articulation of engineering trade-offs. |
+
+---
+
+## 8. Technical Architecture Guidance
+
+### Recommended Pipeline:
+$$\text{Cloud Backend Service (Go Clean Architecture / Node.js)} \longrightarrow \text{ADB Proxy} \longrightarrow \text{scrcpy-server (on Redroid OS)} \longrightarrow \text{WebSocket Multiplexer} \longrightarrow \text{Browser WebCodecs (HTML5 Canvas)}$$
+
+* **Protocol Framing & Multiplexing:** Use a 1-byte channel prefix to multiplex multiple data channels over a single WebSocket connection:
+  - `0x00`: Raw H.264 Video NAL Units (Annex B format)
+  - `0x01`: Audio PCM / AAC Stream (if implemented)
+  - `0x02`: Binary Input & Control Messages (touch, scroll, keycode, text)
+  - `0x03`: Ping / Pong Telemetry & Latency Probes
+* **Video Decoding:** Hardware-accelerated WebCodecs API (`VideoDecoder` configured for `avc1.42e01f`) connected to an `OffscreenCanvas` or desynchronized 2D canvas context to minimize buffer queues.
+* **Input Normalization:** Math-based projection mapping client mouse/touch coordinates across responsive canvas boundaries with aspect-ratio preservation.
+* **Secure Context (HTTPS/WSS) Enforcement:** WebCodecs is restricted to Secure Contexts. While `http://localhost` is permitted during local development, remote Cloud VM connections require valid TLS termination (e.g. Caddy or Nginx reverse proxy with automated Let's Encrypt certificates) to avoid browser connection blocks and `1006` WebSocket drops.

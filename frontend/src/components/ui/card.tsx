@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils';
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
-    variant?: 'default' | 'surface-2' | 'spotlight-violet' | 'spotlight-magenta' | 'spotlight-orange';
+    variant?: 'default' | 'surface-2' | 'spotlight-violet' | 'spotlight-magenta' | 'spotlight-orange' | 'spotlight-coral';
   }
 >(({ className, variant = 'default', ...props }, ref) => {
   const variantStyles = {
@@ -16,6 +16,8 @@ const Card = React.forwardRef<
       'bg-gradient-to-br from-pink-900/35 via-surface-1 to-canvas border-pink-500/25 shadow-2xl shadow-pink-950/20 rounded-2xl',
     'spotlight-orange':
       'bg-gradient-to-br from-amber-900/30 via-surface-1 to-canvas border-amber-500/25 shadow-2xl shadow-amber-950/20 rounded-2xl',
+    'spotlight-coral':
+      'bg-gradient-to-br from-rose-900/35 via-surface-1 to-canvas border-rose-500/25 shadow-2xl shadow-rose-950/20 rounded-2xl',
   };
 
   return (

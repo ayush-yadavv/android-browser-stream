@@ -8,4 +8,6 @@ export interface SessionData {
   target_activity?: string;
   recording?: boolean;
   recording_path?: string;
+  created_at?: string;
+  last_active_at?: string;
 }

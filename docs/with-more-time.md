@@ -49,16 +49,15 @@ Currently, Redroid runs in guest software rendering mode (`gpu_mode=guest`), whi
 
 ---
 
-## 3. Pre-Warmed Container Standby Pools (Zero-Second Boot)
+## 3. Distributed Pre-Warmed Container Standby Pools
 
-A typical cold boot for an Android 13 container takes **20–40 seconds** before Android's `SurfaceFlinger` and `adbd` become fully operational (`sys.boot_completed == 1`).
+In our current single-machine implementation, we have already engineered an in-process pre-warmed pool (`backend/infrastructure/docker/prewarmed_pool.go` via `PREWARMED_POOL_SIZE`) that pre-boots Android containers up to `sys.boot_completed == 1` and pre-stages the `scrcpy-server` JAR, cutting user-perceived launch latency from 35s to **< 300ms**.
 
-### Production Solution:
-Implement a **Pre-Warmed Standby Pool**:
-1. The backend maintains an idle pool of 3–5 pre-booted Android containers in the `ready` state.
-2. When a user clicks "Launch Session", an already-booted container is allocated from the warm pool instantly (**< 500ms startup latency**).
-3. The standby pool immediately provisions a replacement container in the background to maintain warm capacity.
-4. When a session ends, the container is destroyed and a clean one created, ensuring zero cross-user state leakage.
+### Scaling with More Time:
+For multi-tenant cloud environments across multiple physical hosts:
+1. **Cluster-Wide Standby Daemon:** A Kubernetes operator maintaining a global pool of pre-warmed pods across worker nodes according to predictive time-of-day demand heuristics.
+2. **Instant VM Snapshotting (CRIU / Firecracker):** Rather than keeping running containers in RAM, use CRIU (Checkpoint/Restore in Userspace) or Firecracker microVM snapshots to restore a warm Android userspace from memory in **under 50ms**.
+3. **Dynamic Re-hydration:** On user disconnect, containers are recycled via snapshot rollback rather than full OS reboots.
 
 ---
 

@@ -251,3 +251,29 @@ Two distinct issues interacted:
    ```
    Spinning the mouse wheel now dispatches valid `±2048` fixed-point scroll packets, achieving smooth, native Android list scrolling.
 
+---
+
+## 10. LinuxKit Virtualized Kernel Binder IPC Absence in Docker Desktop (Signal 129)
+
+### Severity: Critical (Score: 94)
+### Symptoms:
+When starting a session inside Docker Desktop on Linux, the Redroid container was created successfully, but exited within 500ms with `Exited (129)`. The UI remained stuck on "Booting Android...", and the backend hung in an ADB connect retry loop.
+
+### Root Cause Analysis:
+Redroid is not a full emulator; it runs the real Android AOSP userspace directly on the host Linux kernel. Android relies fundamentally on the **Binder IPC driver** (`/dev/binder`, `/dev/hwbinder`, `/dev/vndbinder`) for communication between `init`, `servicemanager`, `SurfaceFlinger`, and `Zygote`.
+While the host Ubuntu system had the `binder_linux` kernel module installed, **Docker Desktop for Linux** executes containers inside an isolated, virtualized `LinuxKit` QEMU VM kernel (`6.12.76-linuxkit`). LinuxKit did not compile or enable `CONFIG_ANDROID_BINDER_IPC`. When Redroid's `/init` booted without `/dev/binder`, Android kernel initialization aborted with termination signal 129.
+
+### Solution:
+1. **Host-Native Docker Migration**:
+   Authored `scripts/install-native-docker.sh` to install native `docker-ce` directly on the host system, bypassing Docker Desktop's LinuxKit VM.
+2. **Modern BinderFS Mounting**:
+   On modern Linux kernels ($\ge$ 5.4), `/dev/binder` static character devices are replaced by `binderfs`. The script mounts the binder filesystem and provisions symlinks:
+   ```bash
+   mount -t binder binder /dev/binderfs
+   ln -sf /dev/binderfs/binder /dev/binder
+   ln -sf /dev/binderfs/hwbinder /dev/hwbinder
+   ln -sf /dev/binderfs/vndbinder /dev/vndbinder
+   ```
+3. **Fail-Fast Backend Diagnostics**:
+   In `backend/usecase/stream_usecase.go`, added a container liveness check on every 500ms cycle of the boot polling loop. If the container exits prematurely with exit code 129, the WebSocket immediately closes with `StatusPolicyViolation` and a descriptive diagnostic banner: *"Container exited: Docker Desktop lacks binder_linux. Run on native Ubuntu or see deploy/setup-vm.sh"*.
+

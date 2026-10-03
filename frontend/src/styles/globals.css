@@ -6,15 +6,24 @@
   body {
     background-color: #080808;
     color: #ffffff;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: 'cv01' on, 'cv05' on, 'cv09' on, 'cv11' on, 'ss03' on, 'ss07' on, 'dlig' on, 'tnum' on;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* Framer typography tracking helpers */
+/* Framer typography tracking helpers per DESIGN.md */
 .display-title {
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em; /* Massive negative letter-spacing on display headlines per DESIGN.md */
 }
 
 .subhead-tight {
   letter-spacing: -0.02em;
+}
+
+/* Framer Level-3 Blue Accent Focus Ring per DESIGN.md */
+.framer-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(0, 153, 255, 0.4);
 }

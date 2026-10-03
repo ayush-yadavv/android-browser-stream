@@ -9,6 +9,7 @@ export const DashboardPage: React.FC = () => {
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [activeSlots, setActiveSlots] = useState(0);
   const [maxSlots, setMaxSlots] = useState(3);
+  const [sessions, setSessions] = useState<SessionData[]>([]);
   const isLaunchingRef = useRef(false);
 
   // Probe active sessions to update live capacity meter
@@ -18,8 +19,9 @@ export const DashboardPage: React.FC = () => {
       try {
         const res = await fetch('/api/sessions');
         if (res.ok && mounted) {
-          const sessions: SessionData[] = await res.json();
-          setActiveSlots(sessions.filter((s) => s.status !== 'terminated').length);
+          const data: SessionData[] = await res.json();
+          setSessions(data);
+          setActiveSlots(data.filter((s) => s.status !== 'terminated').length);
         }
         const healthRes = await fetch('/api/health');
         if (healthRes.ok && mounted) {
@@ -78,6 +80,7 @@ export const DashboardPage: React.FC = () => {
       launchError={launchError}
       activeSlots={activeSlots}
       maxSlots={maxSlots}
+      sessions={sessions}
     />
   );
 };

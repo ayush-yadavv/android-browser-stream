@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,8 @@ import {
 } from './ui/dialog';
 import { Button } from './ui/button';
 import { LatencyStats } from '../hooks/useLatencyStats';
-import { Clock, Film, Zap, Activity, AlertTriangle, Download } from 'lucide-react';
+import { Clock, Film, Zap, Activity, AlertTriangle, Download, Play } from 'lucide-react';
+import { RecordingPlayerModal } from './RecordingPlayerModal';
 
 interface SessionSummaryDialogProps {
   isOpen: boolean;
@@ -30,6 +31,15 @@ export const SessionSummaryDialog: React.FC<SessionSummaryDialogProps> = ({
   sessionId,
   recording,
 }) => {
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
+
+  // Ensure child player modal closes if the parent summary dialog is dismissed
+  React.useEffect(() => {
+    if (!isOpen) {
+      setIsPlayerOpen(false);
+    }
+  }, [isOpen]);
+
   const formatTime = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
@@ -37,7 +47,8 @@ export const SessionSummaryDialog: React.FC<SessionSummaryDialogProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mb-2">
@@ -93,17 +104,28 @@ export const SessionSummaryDialog: React.FC<SessionSummaryDialogProps> = ({
         </div>
 
         {recording && sessionId && (
-          <div className="p-3 rounded-xl bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-between">
+          <div className="p-3 rounded-xl bg-accent-blue/10 border border-accent-blue/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="flex items-center gap-2">
-              <Film className="w-4 h-4 text-accent-blue" />
+              <Film className="w-4 h-4 text-accent-blue shrink-0" />
               <span className="text-xs font-medium text-ink">Session Recording Captured</span>
             </div>
-            <a href={`/api/sessions/${sessionId}/recording`} download target="_blank" rel="noreferrer">
-              <Button size="sm" variant="default" className="text-xs gap-1.5 h-7 rounded-pill">
-                <Download className="w-3.5 h-3.5" />
-                <span>Download MP4</span>
+            <div className="flex items-center gap-1.5 self-end sm:self-auto">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setIsPlayerOpen(true)}
+                className="text-xs gap-1.5 h-7 rounded-pill"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Watch</span>
               </Button>
-            </a>
+              <a href={`/api/sessions/${sessionId}/recording`} download target="_blank" rel="noreferrer">
+                <Button size="sm" variant="default" className="text-xs gap-1.5 h-7 rounded-pill">
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </Button>
+              </a>
+            </div>
           </div>
         )}
 
@@ -117,5 +139,14 @@ export const SessionSummaryDialog: React.FC<SessionSummaryDialogProps> = ({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {sessionId && (
+      <RecordingPlayerModal
+        isOpen={isPlayerOpen}
+        onClose={() => setIsPlayerOpen(false)}
+        sessionId={sessionId}
+      />
+    )}
+  </>
   );
 };

@@ -14,7 +14,12 @@ import {
   Layers,
   Code2,
   Loader2,
+  Film,
+  Clock,
+  Download,
 } from 'lucide-react';
+import { SessionData } from '../types/session';
+import { RecordingPlayerModal } from './RecordingPlayerModal';
 
 export interface LaunchOptions {
   kioskMode?: boolean;
@@ -27,6 +32,7 @@ interface SessionManagerProps {
   launchError: string | null;
   activeSlots?: number;
   maxSlots?: number;
+  sessions?: SessionData[];
 }
 
 export const SessionManager: React.FC<SessionManagerProps> = ({
@@ -35,9 +41,11 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   launchError,
   activeSlots = 0,
   maxSlots = 3,
+  sessions = [],
 }) => {
   const [kioskMode, setKioskMode] = React.useState(false);
   const [recordSession, setRecordSession] = React.useState(false);
+  const [selectedSessionForVideo, setSelectedSessionForVideo] = React.useState<string | null>(null);
 
   return (
     <div className="space-y-16 max-w-5xl mx-auto py-6 select-none">
@@ -94,7 +102,10 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
 
           {/* Launch Configuration Switches (Kiosk Mode & Automated Recording) */}
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs pt-1 select-none">
-            <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-surface-1 border border-hairline hover:bg-surface-2 transition-colors">
+            <label
+              className="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-surface-1 border border-hairline hover:bg-surface-2 transition-colors"
+              title="Restricted Kiosk Mode: Locks container to AOSP DeskClock / Stopwatch. Server-side drops Home, Recents, Power keys and status bar swipes."
+            >
               <input
                 type="checkbox"
                 checked={kioskMode}
@@ -102,7 +113,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                 className="w-3.5 h-3.5 rounded border-neutral-700 bg-neutral-900 text-accent-blue focus:ring-accent-blue/40"
               />
               <span className="text-ink font-medium">🔒 Kiosk Mode</span>
-              <span className="text-ink-muted text-[11px]">(Clock Lockdown)</span>
+              <span className="text-ink-muted text-[11px]">(DeskClock Lockdown)</span>
             </label>
 
             <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-surface-1 border border-hairline hover:bg-surface-2 transition-colors">
@@ -186,6 +197,90 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           </CardContent>
         </Card>
       </section>
+
+      {/* Recent Sessions & Recorded Media Section (BR-5) */}
+      {sessions && sessions.length > 0 && (
+        <section className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold tracking-tight text-ink flex items-center gap-2">
+                <Film className="w-5 h-5 text-accent-blue" />
+                <span>Recent Sessions & Recorded Streams</span>
+              </h2>
+              <p className="text-xs text-ink-muted">
+                Review past sessions, launch in-browser video playback, or download captured fragmented MP4s.
+              </p>
+            </div>
+            <Badge variant="outline" className="text-xs font-mono">
+              {sessions.length} total
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {sessions.slice(0, 6).map((s) => (
+              <div
+                key={s.id}
+                className="p-3.5 rounded-xl bg-surface-1 border border-hairline hover:border-hairline/80 transition-all flex flex-col justify-between gap-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs font-mono font-medium text-ink bg-surface-2 px-1.5 py-0.5 rounded">
+                        {s.id.slice(0, 8)}...{s.id.slice(-4)}
+                      </code>
+                      <Badge
+                        variant={s.status === 'streaming' ? 'default' : 'secondary'}
+                        className="text-[10px] uppercase font-mono py-0"
+                      >
+                        {s.status}
+                      </Badge>
+                      {s.kiosk_enabled && (
+                        <Badge variant="outline" className="text-[10px] text-amber-300 border-amber-500/30 py-0">
+                          🔒 Kiosk
+                        </Badge>
+                      )}
+                    </div>
+                    {s.created_at && (
+                      <p className="text-[11px] text-ink-muted flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        <span>{new Date(s.created_at).toLocaleString()}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {s.recording ? (
+                    <Badge variant="accent" className="text-[10px] py-0 shrink-0">
+                      🎥 Recorded
+                    </Badge>
+                  ) : (
+                    <span className="text-[11px] text-ink-muted shrink-0">No Video</span>
+                  )}
+                </div>
+
+                {s.recording && (
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-hairline/60">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setSelectedSessionForVideo(s.id)}
+                      className="h-7 text-xs rounded-pill gap-1.5"
+                    >
+                      <Play className="w-3 h-3 fill-current" />
+                      <span>Watch</span>
+                    </Button>
+                    <a href={`/api/sessions/${s.id}/recording`} download target="_blank" rel="noreferrer">
+                      <Button size="sm" variant="default" className="h-7 text-xs rounded-pill gap-1.5">
+                        <Download className="w-3 h-3" />
+                        <span>Download</span>
+                      </Button>
+                    </a>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Interactive Architecture & Technical Specification Tabs */}
       <section id="architecture" className="space-y-6 pt-4">
@@ -309,6 +404,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           </TabsContent>
         </Tabs>
       </section>
+
+      {selectedSessionForVideo && (
+        <RecordingPlayerModal
+          isOpen={!!selectedSessionForVideo}
+          onClose={() => setSelectedSessionForVideo(null)}
+          sessionId={selectedSessionForVideo}
+        />
+      )}
     </div>
   );
 };
