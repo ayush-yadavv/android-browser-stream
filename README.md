@@ -148,18 +148,19 @@ Visit **`http://localhost:5173`** to access the DroidCanvas dashboard.
 
 ### Automated Cloud VM Setup:
 ```bash
-# 1. Provision Ubuntu VM and run the automated provisioner
+# Option A: 1-Command Turnkey Cloud VM Setup (Recommended)
+git clone https://github.com/ayush-yadavv/android-browser-stream.git /opt/android-browser-stream && cd /opt/android-browser-stream && sudo ./deploy/deploy.sh droidcanvas.yourdomain.com
+
+# Option B: Step-by-Step Manual Setup
+# 1. Provision Ubuntu VM dependencies & kernel Binder IPC
 chmod +x deploy/setup-vm.sh
 sudo ./deploy/setup-vm.sh
 
-# 2. Configure Caddyfile with your public domain
-nano deploy/Caddyfile
+# 2. Deploy systemd daemon, build assets, and configure Caddy
+sudo ./deploy/deploy.sh droidcanvas.yourdomain.com
 
-# 3. Deploy systemd daemon and Caddy reverse proxy
-sudo ./deploy/deploy.sh
-
-# 4. Verify deployment health, TLS, and WebCodecs Secure Context
-./scripts/verify_deployment.sh https://stream.yourdomain.com
+# 3. Verify deployment health, TLS, and WebCodecs Secure Context
+./scripts/verify_deployment.sh https://droidcanvas.yourdomain.com
 ```
 
 For full operations manual covering AWS EC2, GCP, DigitalOcean, Hetzner, and UFW firewall rules, see [`docs/deployment-guide.md`](docs/deployment-guide.md).

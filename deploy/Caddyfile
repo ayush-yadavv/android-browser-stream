@@ -1,5 +1,5 @@
 # Caddy configuration for Real-Time Android Browser Streaming
-# Replace {$DOMAIN:localhost} with your actual domain (e.g., stream.example.com)
+# Replace {$DOMAIN:localhost} with your actual domain (e.g., droidcanvas.yourdomain.com)
 
 {$DOMAIN:localhost} {
     # Serve built React frontend assets

@@ -16,12 +16,16 @@ echo -e "${CYAN}============================================================${NC
 echo -e "${CYAN}  DroidCanvas Cloud VM Deployment & Update Runner           ${NC}"
 echo -e "${CYAN}============================================================${NC}"
 
-# 1. Resolve project root directory
+# 1. Resolve project root directory and parameters
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+DOMAIN="${1:-${DOMAIN:-}}"
 cd "${PROJECT_ROOT}"
 
-echo -e "[*] Project root: ${PROJECT_ROOT}"
+echo -e "[*] Project root : ${PROJECT_ROOT}"
+if [ -n "${DOMAIN}" ]; then
+    echo -e "[*] Target Domain: ${BOLD:-}${DOMAIN}${NC}"
+fi
 
 # 2. Verify root/sudo privileges
 if [ "$EUID" -ne 0 ]; then
@@ -30,7 +34,16 @@ if [ "$EUID" -ne 0 ]; then
     exec sudo bash "$0" "$@"
 fi
 
-# 3. Verify Docker & Binder devices
+# 3. Check and auto-run VM provisioner if host environment is unprovisioned
+if ! command -v docker &>/dev/null || ! command -v go &>/dev/null || ! command -v node &>/dev/null || ! command -v caddy &>/dev/null || [ ! -e /dev/binder ]; then
+    echo -e "${YELLOW}[!] Host environment is missing essential dependencies or Binder devices.${NC}"
+    echo -e "${YELLOW}[!] Automatically executing VM provisioner (deploy/setup-vm.sh)...${NC}"
+    bash "${SCRIPT_DIR}/setup-vm.sh"
+    [ -f /etc/profile.d/go.sh ] && . /etc/profile.d/go.sh || true
+    export PATH=$PATH:/usr/local/go/bin
+fi
+
+# 4. Verify Docker & Binder devices
 echo -e "[1/7] Checking Docker Engine and Binder IPC devices..."
 systemctl is-active --quiet docker || systemctl start docker
 
@@ -97,16 +110,22 @@ echo -e "${GREEN}[OK] droidcanvas.service started and enabled on boot.${NC}"
 echo -e "[6/7] Updating Caddy configuration..."
 CADDYFILE_DEST="/etc/caddy/Caddyfile"
 mkdir -p /etc/caddy
-if [ ! -f "${CADDYFILE_DEST}" ] || [ -f "${PROJECT_ROOT}/deploy/Caddyfile" ]; then
-    # Dynamically inject frontend dist path
-    sed "s|/srv/frontend/dist|${PROJECT_ROOT}/frontend/dist|g" "${PROJECT_ROOT}/deploy/Caddyfile" > "${CADDYFILE_DEST}"
-    if systemctl is-active --quiet caddy; then
-        systemctl reload caddy
-        echo -e "${GREEN}[OK] Caddy reloaded.${NC}"
-    else
-        systemctl enable --now caddy
-        echo -e "${GREEN}[OK] Caddy started.${NC}"
-    fi
+
+# Dynamically inject frontend dist path
+sed "s|/srv/frontend/dist|${PROJECT_ROOT}/frontend/dist|g" "${PROJECT_ROOT}/deploy/Caddyfile" > "${CADDYFILE_DEST}"
+
+# Dynamically inject domain if provided
+if [ -n "${DOMAIN}" ]; then
+    echo -e "[*] Configuring Caddy with Let's Encrypt TLS for domain: ${DOMAIN}"
+    sed -i "s|{\$DOMAIN:localhost}|${DOMAIN}|g" "${CADDYFILE_DEST}"
+fi
+
+if systemctl is-active --quiet caddy; then
+    systemctl reload caddy
+    echo -e "${GREEN}[OK] Caddy reloaded.${NC}"
+else
+    systemctl enable --now caddy
+    echo -e "${GREEN}[OK] Caddy started.${NC}"
 fi
 
 # 9. Healthcheck verification
@@ -124,6 +143,11 @@ fi
 echo -e "${CYAN}============================================================${NC}"
 echo -e "${GREEN}  DroidCanvas Deployment Complete!                          ${NC}"
 echo -e "${CYAN}============================================================${NC}"
+if [ -n "${DOMAIN}" ]; then
+    echo -e "Web App URL    : ${GREEN}${BOLD}https://${DOMAIN}${NC}"
+else
+    echo -e "Web App URL    : ${GREEN}${BOLD}http://localhost${NC} (or configure https://<your-domain>)"
+fi
 echo -e "Service Status : sudo systemctl status droidcanvas"
 echo -e "Stream Logs    : sudo journalctl -u droidcanvas -f"
 echo -e "Proxy Logs     : sudo journalctl -u caddy -f"

@@ -17,7 +17,7 @@ TARGET_URL="${1:-}"
 
 if [ -z "${TARGET_URL}" ]; then
     echo -e "${RED}[ERROR] Target URL required.${NC}"
-    echo -e "Usage: $0 <https://stream.yourdomain.com | http://localhost:5173 | https://localhost>"
+    echo -e "Usage: $0 <https://droidcanvas.yourdomain.com | http://localhost:5173 | https://localhost>"
     exit 1
 fi
 

@@ -95,78 +95,61 @@ The W3C **WebCodecs API** (`VideoDecoder`) requires a **Secure Context** (`windo
 2. Create an **A-Record** pointing your subdomain to the Cloud VM's public IPv4 address:
    ```
    Type:  A
-   Host:  stream (or @ for apex)
+   Host:  droidcanvas (or @ for apex)
    Value: <YOUR_CLOUD_VM_PUBLIC_IP>
    TTL:   300 seconds (5 minutes)
    ```
 3. Verify DNS propagation:
    ```bash
-   dig +short stream.yourdomain.com
+   dig +short droidcanvas.yourdomain.com
    # Should output your Cloud VM's public IP
    ```
 
 ---
 
-## 4. Automated Step-by-Step Provisioning
+## 4. Automated Turnkey Provisioning
 
-### Step 1: Connect to Cloud VM & Clone Repository
+### Option A: 1-Command Turnkey Setup (Recommended)
+
+Run this single command in the SSH terminal of your fresh Ubuntu VM:
+
+```bash
+git clone https://github.com/ayush-yadavv/android-browser-stream.git /opt/android-browser-stream && cd /opt/android-browser-stream && sudo ./deploy/deploy.sh droidcanvas.yourdomain.com
+```
+*(Note: Replace `droidcanvas.yourdomain.com` with your actual DNS subdomain pointing to the VM, or omit the domain argument to test on `localhost`).*
+
+**What this 1 command automates from scratch:**
+1. **Self-Bootstrapping Detection:** Detects that the host VM is unprovisioned and automatically launches [`deploy/setup-vm.sh`](file:///mnt/Projects/android-browser-stream/deploy/setup-vm.sh).
+2. **OS & Kernel Setup:** Configures Android Binder IPC (`/dev/binderfs`), Docker Engine, Node.js 20 LTS, Go 1.22+ toolchain, and pulls `redroid/redroid:13.0.0-latest`.
+3. **Frontend Compilation:** Executes `npm ci` and compiles the optimized React 18 production bundle (`frontend/dist`).
+4. **Backend Compilation:** Compiles the Go 1.22+ Clean Architecture service (`backend/server`).
+5. **Daemonization:** Configures systemd unit [`droidcanvas.service`](file:///mnt/Projects/android-browser-stream/deploy/droidcanvas.service) with automatic restarts on crash and starts it.
+6. **Reverse Proxy & Auto-TLS:** Injects your domain into Caddy with HTTP/3 support and automatically provisions public Let's Encrypt TLS certificates.
+7. **Health Verification:** Verifies the backend health probe and outputs your live streaming URL.
+
+---
+
+### Option B: Step-by-Step Manual Provisioning
+
+If you prefer executing each phase manually:
+
+#### Step 1: Connect to Cloud VM & Clone Repository
 ```bash
 ssh ubuntu@<YOUR_VM_PUBLIC_IP>
 
-# Clone repository to standard production path
 sudo git clone https://github.com/ayush-yadavv/android-browser-stream.git /opt/android-browser-stream
 cd /opt/android-browser-stream
 ```
 
-### Step 2: Run VM Provisioner Script
-The provisioner script automates system package installation, BinderFS kernel module mounting, Docker Engine installation, Redroid image caching, and Caddy setup:
+#### Step 2: Run VM Provisioner Script
 ```bash
 chmod +x deploy/setup-vm.sh
 sudo ./deploy/setup-vm.sh
 ```
 
-### Step 3: Configure Domain in Caddyfile
-Edit `/opt/android-browser-stream/deploy/Caddyfile` with your actual domain:
+#### Step 3: Execute Deployment Runner with Your Domain
 ```bash
-sudo nano deploy/Caddyfile
-```
-Replace the first line with your domain:
-```caddy
-stream.yourdomain.com {
-    # Serve built React frontend assets
-    root * /opt/android-browser-stream/frontend/dist
-    file_server
-
-    # Reverse proxy API and WebSocket connections to the Go backend
-    handle /api/* {
-        reverse_proxy localhost:8080 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # SPA routing fallback: send all other routes to index.html
-    handle {
-        try_files {path} /index.html
-    }
-
-    # Security headers
-    header {
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        Referrer-Policy "strict-origin-when-cross-origin"
-    }
-
-    encode zstd gzip
-}
-```
-
-### Step 4: Execute Deployment Runner
-Run the deployment script to compile the frontend, compile the backend binary, register the `systemd` daemon, reload Caddy, and perform health checks:
-```bash
-sudo ./deploy/deploy.sh
+sudo ./deploy/deploy.sh droidcanvas.yourdomain.com
 ```
 
 ---
@@ -176,12 +159,12 @@ sudo ./deploy/deploy.sh
 ### Automated Remote Verification:
 Run the remote verification harness against your deployed domain from your local machine:
 ```bash
-./scripts/verify_deployment.sh https://stream.yourdomain.com
+./scripts/verify_deployment.sh https://droidcanvas.yourdomain.com
 ```
 
 ### Manual Acceptance Checklist:
 1. **WebCodecs Secure Context:**
-   Open Chrome DevTools (`F12`) on `https://stream.yourdomain.com`. Run in console:
+   Open Chrome DevTools (`F12`) on `https://droidcanvas.yourdomain.com`. Run in console:
    ```javascript
    window.isSecureContext === true && typeof VideoDecoder === 'function'
    ```
