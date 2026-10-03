@@ -9,11 +9,8 @@ import (
 	"github.com/user/android-browser-stream/backend/domain"
 )
 
-// PortPool defines contract for acquiring and releasing host ports.
-type PortPool interface {
-	Acquire() (int, error)
-	Release(port int)
-}
+// PortPool defines contract for acquiring and releasing host ports (canonical definition in domain).
+type PortPool = domain.PortPool
 
 // SessionConfig configures redroid container and session limits.
 type SessionConfig struct {
@@ -28,10 +25,8 @@ type SessionConfig struct {
 	BootTimeout  time.Duration
 }
 
-// ADBDisconnector defines contract to terminate ADB connection for a device.
-type ADBDisconnector interface {
-	Disconnect(ctx context.Context, serial string) error
-}
+// ADBDisconnector defines contract to terminate ADB connection for a device (canonical definition in domain).
+type ADBDisconnector = domain.ADBDisconnector
 
 type sessionUsecase struct {
 	sessionRepo   domain.SessionRepository
@@ -173,13 +168,13 @@ func (u *sessionUsecase) CreateSession(ctx context.Context, opts ...domain.Creat
 
 	// 4. Provision ephemeral container
 	containerConfig := domain.ContainerConfig{
-		Image:       u.config.Image,
-		ADBPort:     port,
-		Width:       u.config.DeviceWidth,
-		Height:      u.config.DeviceHeight,
-		DPI:         u.config.DeviceDPI,
-		FPS:         u.config.DeviceFPS,
-		GPUMode:     u.config.GPUMode,
+		Image:        u.config.Image,
+		ADBPort:      port,
+		Width:        u.config.DeviceWidth,
+		Height:       u.config.DeviceHeight,
+		DPI:          u.config.DeviceDPI,
+		FPS:          u.config.DeviceFPS,
+		GPUMode:      u.config.GPUMode,
 		MemoryLimit:  4 * 1024 * 1024 * 1024,
 		CPULimit:     2 * 1e9,
 		KioskEnabled: opt.KioskEnabled,

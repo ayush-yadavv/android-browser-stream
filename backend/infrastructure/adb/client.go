@@ -123,3 +123,16 @@ func (c *Client) Disconnect(ctx context.Context, serial string) error {
 	_ = cmd.Run()
 	return nil
 }
+
+// RunShell executes an ADB shell command and returns trimmed combined standard/error output.
+func (c *Client) RunShell(ctx context.Context, serial string, args ...string) (string, error) {
+	cmd := c.Shell(ctx, serial, args...)
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
+// RunShellBackground executes an ADB shell command asynchronously in the background.
+func (c *Client) RunShellBackground(ctx context.Context, serial string, args ...string) error {
+	cmd := c.Shell(ctx, serial, args...)
+	return cmd.Start()
+}

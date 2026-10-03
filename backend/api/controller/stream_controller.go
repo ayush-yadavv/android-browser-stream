@@ -12,7 +12,6 @@ import (
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/user/android-browser-stream/backend/domain"
-	"github.com/user/android-browser-stream/backend/usecase"
 )
 
 // StreamController handles WebSocket upgrade and streaming relay for sessions.
@@ -92,7 +91,7 @@ func (sc *StreamController) HandleStream(c *gin.Context) {
 	}
 
 	// Block on streaming relay loop until client disconnects or container terminates
-	if err := sc.streamUsecase.RelaySession(c.Request.Context(), session, usecase.NewWSConnAdapter(conn), requestedCodecs...); err != nil {
+	if err := sc.streamUsecase.RelaySession(c.Request.Context(), session, NewWSConnAdapter(conn), requestedCodecs...); err != nil {
 		log.Printf("Stream relay terminated for session %s: %v", sessionID, err)
 		reason := err.Error()
 		if len(reason) > 120 {

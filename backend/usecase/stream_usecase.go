@@ -10,10 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/user/android-browser-stream/backend/domain"
-	"github.com/user/android-browser-stream/backend/infrastructure/adb"
-	"github.com/user/android-browser-stream/backend/infrastructure/scrcpy"
 )
 
 // Channel multiplexing prefixes on single WebSocket connection
@@ -118,7 +115,7 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 			default:
 			}
 
-			pkt, err := scrcpy.ReadVideoPacket(videoReader)
+			pkt, err := domain.ReadVideoPacket(videoReader)
 			if err != nil {
 				setErr(err)
 				return
@@ -134,10 +131,10 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 
 			var ptsFlags uint64 = uint64(pkt.PTS)
 			if pkt.IsConfig {
-				ptsFlags |= scrcpy.PTSConfigFlag
+				ptsFlags |= domain.PTSConfigFlag
 			}
 			if pkt.IsKeyFrame {
-				ptsFlags |= scrcpy.PTSKeyFlag
+				ptsFlags |= domain.PTSKeyFlag
 			}
 
 			binary.BigEndian.PutUint64(msg[1:9], ptsFlags)
@@ -163,7 +160,7 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 				default:
 				}
 
-				pkt, err := scrcpy.ReadAudioPacket(r.audioReader)
+				pkt, err := domain.ReadAudioPacket(r.audioReader)
 				if err != nil {
 					// Audio stream disconnected or silent; do not abort video/control session
 					return
@@ -175,7 +172,7 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 
 				var ptsFlags uint64 = uint64(pkt.PTS)
 				if pkt.IsConfig {
-					ptsFlags |= scrcpy.PTSConfigFlag
+					ptsFlags |= domain.PTSConfigFlag
 				}
 
 				binary.BigEndian.PutUint64(msg[1:9], ptsFlags)
@@ -306,7 +303,8 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 
 // StreamUsecase coordinates device boot readiness, scrcpy execution, and streaming relay.
 type StreamUsecase struct {
-	adb             *adb.Client
+	commander       domain.DeviceCommander
+	streamerFactory domain.DeviceStreamerFactory
 	sessionRepo     domain.SessionRepository
 	containerRepo   domain.ContainerRepository
 	scrcpyBinPath   string
@@ -331,13 +329,20 @@ func WithRecorderFactory(f domain.RecorderFactory) StreamUsecaseOption {
 	}
 }
 
-// NewStreamUsecase constructs a StreamUsecase.
-func NewStreamUsecase(adbClient *adb.Client, sr domain.SessionRepository, scrcpyPath string, opts ...StreamUsecaseOption) *StreamUsecase {
+// NewStreamUsecase constructs a StreamUsecase adhering to Dependency Inversion.
+func NewStreamUsecase(
+	commander domain.DeviceCommander,
+	streamerFactory domain.DeviceStreamerFactory,
+	sr domain.SessionRepository,
+	scrcpyPath string,
+	opts ...StreamUsecaseOption,
+) *StreamUsecase {
 	u := &StreamUsecase{
-		adb:           adbClient,
-		sessionRepo:   sr,
-		scrcpyBinPath: scrcpyPath,
-		relay:         NewStreamRelay(),
+		commander:       commander,
+		streamerFactory: streamerFactory,
+		sessionRepo:     sr,
+		scrcpyBinPath:   scrcpyPath,
+		relay:           NewStreamRelay(),
 	}
 	for _, opt := range opts {
 		opt(u)
@@ -368,7 +373,7 @@ func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Sessio
 			}
 		}
 
-		if err := u.adb.Connect(bootCtx, "127.0.0.1", session.ADBPort); err == nil {
+		if err := u.commander.Connect(bootCtx, "127.0.0.1", session.ADBPort); err == nil {
 			connected = true
 			break
 		}
@@ -400,7 +405,7 @@ func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Sessio
 		}
 
 		// Check sys.boot_completed
-		if err := u.adb.WaitForBoot(bootCtx, serial, 1*time.Second); err == nil {
+		if err := u.commander.WaitForBoot(bootCtx, serial, 1*time.Second); err == nil {
 			break
 		}
 	}
@@ -411,7 +416,7 @@ func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Sessio
 
 	// 3. Start scrcpy-server with scrcpy forwarding port = ADBPort + 100
 	scrcpyPort := session.ADBPort + 100
-	server := scrcpy.NewServer(u.adb, serial)
+	server := u.streamerFactory.NewStreamer(serial)
 	if err := server.Start(ctx, u.scrcpyBinPath, scrcpyPort, requestedCodec); err != nil {
 		return fmt.Errorf("start scrcpy-server: %w", err)
 	}
@@ -430,9 +435,8 @@ func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Sessio
 		}
 		cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		wakeCmd := u.adb.Shell(cmdCtx, serial, "input", "keyevent", "82")
-		_ = wakeCmd.Run()
-		_ = u.adb.Shell(cmdCtx, serial, "settings", "put", "system", "show_touches", "1").Run()
+		_, _ = u.commander.RunShell(cmdCtx, serial, "input", "keyevent", "82")
+		_, _ = u.commander.RunShell(cmdCtx, serial, "settings", "put", "system", "show_touches", "1")
 	}()
 
 	// 4. Mark session as streaming
@@ -471,36 +475,36 @@ func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Sessio
 			// Tier 2: AOSP lockdown
 			// 1. Fabricate Runtime Resource Overlays (FRRO) to set navigation bar height to 0
 			// This permanently removes the NavigationBar from Android SystemUI at the OS compositor level
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "android", "--name", "HideNavBar", "android:dimen/navigation_bar_height", "0x05", "0x00000000").Run()
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "android", "--name", "HideNavBarFrame", "android:dimen/navigation_bar_frame_height", "0x05", "0x00000000").Run()
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "com.android.systemui", "--name", "HideSysUINavBar", "com.android.systemui:dimen/navigation_bar_size", "0x05", "0x00000000").Run()
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "com.android.systemui", "--name", "HideSysUINavBarFrame", "com.android.systemui:dimen/navigation_bar_frame_height", "0x05", "0x00000000").Run()
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "android", "--name", "HideNavBar", "android:dimen/navigation_bar_height", "0x05", "0x00000000")
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "android", "--name", "HideNavBarFrame", "android:dimen/navigation_bar_frame_height", "0x05", "0x00000000")
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "com.android.systemui", "--name", "HideSysUINavBar", "com.android.systemui:dimen/navigation_bar_size", "0x05", "0x00000000")
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "com.android.systemui", "--name", "HideSysUINavBarFrame", "com.android.systemui:dimen/navigation_bar_frame_height", "0x05", "0x00000000")
 
 			// Enable the fabricated overlays
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideNavBar").Run()
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideNavBarFrame").Run()
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideSysUINavBar").Run()
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideSysUINavBarFrame").Run()
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideNavBar")
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideNavBarFrame")
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideSysUINavBar")
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideSysUINavBarFrame")
 
 			// Restart SystemUI to apply zero-height navigation bar
-			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "pkill", "-f", "com.android.systemui").Run()
+			_, _ = u.commander.RunShell(cmdCtx, serial, "su", "0", "pkill", "-f", "com.android.systemui")
 
 			// 2. Send disable flags to StatusBarManager to physically disable Home, Recents, Search, and Notification pull-down
-			_ = u.adb.Shell(cmdCtx, serial, "cmd", "statusbar", "send-disable-flag", "home", "recents", "search", "statusbar-expansion", "notification-peek").Run()
+			_, _ = u.commander.RunShell(cmdCtx, serial, "cmd", "statusbar", "send-disable-flag", "home", "recents", "search", "statusbar-expansion", "notification-peek")
 
 			// 3. Enable lock-to-app / screen pinning policy and immersive fullscreen
-			_ = u.adb.Shell(cmdCtx, serial, "settings", "put", "secure", "lock_to_app_enabled", "1").Run()
-			_ = u.adb.Shell(cmdCtx, serial, "settings", "put", "global", "policy_control", "immersive.full=*").Run()
+			_, _ = u.commander.RunShell(cmdCtx, serial, "settings", "put", "secure", "lock_to_app_enabled", "1")
+			_, _ = u.commander.RunShell(cmdCtx, serial, "settings", "put", "global", "policy_control", "immersive.full=*")
 
 			// 4. Launch target application
 			if targetAct != "" {
-				_ = u.adb.Shell(cmdCtx, serial, "am", "start", "-n", targetPkg+"/"+targetAct).Run()
+				_, _ = u.commander.RunShell(cmdCtx, serial, "am", "start", "-n", targetPkg+"/"+targetAct)
 			} else {
-				_ = u.adb.Shell(cmdCtx, serial, "monkey", "-p", targetPkg, "-c", "android.intent.category.LAUNCHER", "1").Run()
+				_, _ = u.commander.RunShell(cmdCtx, serial, "monkey", "-p", targetPkg, "-c", "android.intent.category.LAUNCHER", "1")
 			}
 
 			// Tier 3: Watchdog ensures target app stays in foreground (at 300ms interval)
-			watchdog := NewKioskWatchdog(NewADBClientRunner(u.adb), serial, targetPkg, targetAct, 300*time.Millisecond)
+			watchdog := NewKioskWatchdog(u.commander, serial, targetPkg, targetAct, 300*time.Millisecond)
 			watchdog.Start(ctx)
 		}()
 	}
@@ -553,7 +557,7 @@ func isBlockedKioskControl(payload []byte) bool {
 	}
 	msgType := payload[0]
 	// 1. Keycode injection: drop Home (3), App Switch (187), Power (26), Settings (176), Search (84)
-	if msgType == scrcpy.MsgTypeInjectKeycode && len(payload) >= 6 {
+	if msgType == domain.MsgTypeInjectKeycode && len(payload) >= 6 {
 		keycode := binary.BigEndian.Uint32(payload[2:6])
 		switch keycode {
 		case 3, 187, 26, 176, 84:
@@ -562,10 +566,10 @@ func isBlockedKioskControl(payload []byte) bool {
 	}
 	// Note: Bottom navigation bar is physically eliminated at the OS compositor level (h=0) via FRRO overlays.
 	// We only guard extreme top-edge swipes (top 15px) to prevent notification shade drag attempts.
-	if msgType == scrcpy.MsgTypeInjectTouchEvent && len(payload) >= 22 {
+	if msgType == domain.MsgTypeInjectTouchEvent && len(payload) >= 22 {
 		action := payload[1]
 		y := int32(binary.BigEndian.Uint32(payload[14:18]))
-		if action == scrcpy.ActionDown && y < 15 {
+		if action == domain.ActionDown && y < 15 {
 			return true
 		}
 	}
@@ -604,23 +608,4 @@ func (w *activityTrackingReadWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return n, err
-}
-
-// WSConnAdapter adapts a *websocket.Conn to domain.WebSocketConn.
-type WSConnAdapter struct {
-	Conn *websocket.Conn
-}
-
-// NewWSConnAdapter wraps *websocket.Conn to implement domain.WebSocketConn.
-func NewWSConnAdapter(conn *websocket.Conn) *WSConnAdapter {
-	return &WSConnAdapter{Conn: conn}
-}
-
-func (a *WSConnAdapter) ReadMessage(ctx context.Context) ([]byte, error) {
-	_, data, err := a.Conn.Read(ctx)
-	return data, err
-}
-
-func (a *WSConnAdapter) WriteMessage(ctx context.Context, data []byte) error {
-	return a.Conn.Write(ctx, websocket.MessageBinary, data)
 }

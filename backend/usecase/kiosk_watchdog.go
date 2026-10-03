@@ -5,29 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/user/android-browser-stream/backend/infrastructure/adb"
+	"github.com/user/android-browser-stream/backend/domain"
 )
 
-// ADBShellRunner abstracts running shell commands against an Android device.
-type ADBShellRunner interface {
-	RunShell(ctx context.Context, serial string, args ...string) (string, error)
-}
-
-// ADBClientRunner implements ADBShellRunner using *adb.Client.
-type ADBClientRunner struct {
-	client *adb.Client
-}
-
-// NewADBClientRunner constructs an ADBShellRunner from an adb.Client.
-func NewADBClientRunner(c *adb.Client) *ADBClientRunner {
-	return &ADBClientRunner{client: c}
-}
-
-func (r *ADBClientRunner) RunShell(ctx context.Context, serial string, args ...string) (string, error) {
-	cmd := r.client.Shell(ctx, serial, args...)
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
+// ADBShellRunner defines contract to run shell commands on Android (canonical definition in domain).
+type ADBShellRunner = domain.ADBShellRunner
 
 // KioskWatchdog periodically checks foreground activity and restores the target app if unauthorized app appears.
 type KioskWatchdog struct {

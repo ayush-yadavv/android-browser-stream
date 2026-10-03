@@ -3,20 +3,22 @@ package scrcpy
 import (
 	"encoding/binary"
 	"io"
+
+	"github.com/user/android-browser-stream/backend/domain"
 )
 
 // Control Message Types (scrcpy v2.7)
 const (
-	MsgTypeInjectKeycode     = 0x00
+	MsgTypeInjectKeycode     = domain.MsgTypeInjectKeycode
 	MsgTypeInjectText        = 0x01
-	MsgTypeInjectTouchEvent  = 0x02
+	MsgTypeInjectTouchEvent  = domain.MsgTypeInjectTouchEvent
 	MsgTypeInjectScrollEvent = 0x03
 	MsgTypeSetClipboard      = 0x09
 )
 
 // Touch and Key Action Constants
 const (
-	ActionDown   = 0x00
+	ActionDown   = domain.ActionDown
 	ActionUp     = 0x01
 	ActionMove   = 0x02
 	ActionCancel = 0x03

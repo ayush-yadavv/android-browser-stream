@@ -2,13 +2,13 @@ package domain
 
 // ContainerConfig holds Android container launch parameters.
 type ContainerConfig struct {
-	Image       string
-	ADBPort     int
-	Width       int
-	Height      int
-	DPI         int
-	FPS         int
-	GPUMode     string
+	Image        string
+	ADBPort      int
+	Width        int
+	Height       int
+	DPI          int
+	FPS          int
+	GPUMode      string
 	MemoryLimit  int64
 	CPULimit     int64
 	KioskEnabled bool

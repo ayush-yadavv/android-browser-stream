@@ -1239,3 +1239,64 @@
   - None.
 - **User Decision / Next Step:**
   - Inform user of resolution across all 5 review points and readiness for commit.
+
+---
+
+### Entry 53
+- **Timestamp:** 2026-10-03T15:21:05+05:30
+- **User Prompt (Verbatim):**
+  ```
+  /plan audit backend as per @[GO-BACKEND-BEST-PRACTICES.md]
+  ```
+- **Response & Actions Taken (Backend Architecture Audit & Planning):**
+  1. Conducted comprehensive static and architectural audit of the entire `backend/` codebase against Clean Architecture rules in `GO-BACKEND-BEST-PRACTICES.md` and `AGENTS.md`.
+  2. Identified architectural violations, layer leakage, and interface gaps:
+     - **Issue 1 (Clean Architecture Dependency Inversion in Use Case)**: `usecase/stream_usecase.go` imports outer delivery library (`github.com/coder/websocket`) and concrete infrastructure packages (`infrastructure/adb`, `infrastructure/scrcpy`). `usecase/kiosk_watchdog.go` also imports `infrastructure/adb`. `StreamUsecase` holds concrete `*adb.Client` pointer instead of a domain interface.
+     - **Issue 2 (Delivery/Controller Leakage)**: `usecase/stream_usecase.go` defines `WSConnAdapter` (transport adapter) inside the use case layer, forcing `api/controller/stream_controller.go` to import `usecase`.
+     - **Issue 3 (Missing Domain Contracts)**: `PortPool`, `ADBDisconnector`, and `ADBShellRunner` are declared inside `usecase/` rather than in `domain/`. ADB and Scrcpy streamer interfaces are absent from `domain/`.
+     - **Issue 4 (Inconsistent DTOs & Inline Route Handlers)**: `/api/health` and `/api/ping` return untyped `gin.H` maps inline in `api/route/route.go` instead of standard `domain.SuccessResponse` and a typed `domain.HealthResponse`. Standard DTOs are clustered in `domain/errors.go` rather than dedicated `domain/error_response.go` and `domain/success_response.go`.
+     - **Issue 5 (Thin Controller Separation)**: Direct filesystem checks (`os.Stat`) and file streaming in `SessionController.GetRecording` bypass use case verification.
+     - **Issue 6 (Bootstrap Seam Coupling)**: `bootstrap/database.go` directly imports `repository` to run migrations.
+  3. Formulated phased remediation strategy and authored implementation plan artifact.
+- **Errors / Failures Encountered:**
+  - None.
+  - Test suite baseline verified clean (`go test -v -race ./...` passing across all packages).
+- **User Decision / Next Step:**
+  - Await user review and approval of backend Clean Architecture audit and remediation implementation plan.
+
+---
+
+### Entry 54
+- **Timestamp:** 2026-10-03T15:26:18+05:30
+- **User Prompt (Verbatim):**
+  ```
+  [Approved] backend-clean-architecture-audit-plan.md
+  ```
+- **Response & Actions Taken (Executing Clean Architecture Remediation):**
+  1. Received user approval on implementation plan `backend-clean-architecture-audit-plan.md`.
+  2. Initiated Phase 1: Separating standard response DTOs (`domain/error_response.go`, `domain/success_response.go`, `domain/health.go`) and declaring enterprise port contracts (`PortPool`, `ADBDisconnector`, `ADBShellRunner`, `DeviceCommander`, `DeviceStreamer`, `DeviceStreamerFactory`) in `domain/`.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Proceed with Phase 1 through Phase 5 implementation and verification.
+
+---
+
+### Entry 55
+- **Timestamp:** 2026-10-03T15:37:30+05:30
+- **User Prompt (Verbatim):**
+  ```
+  [Approved] backend-clean-architecture-audit-plan.md
+  ```
+- **Response & Actions Taken (Full Clean Architecture Refactor & Verification Complete):**
+  1. Executed all 5 phases of the remediation plan:
+     - **Phase 1 (Domain Contracts & DTOs)**: Created `domain/error_response.go`, `domain/success_response.go`, `domain/health.go`, and `domain/media.go`. Centralized `PortPool`, `ADBDisconnector`, `ADBShellRunner`, `DeviceCommander`, `DeviceStreamer`, and `DeviceStreamerFactory` contracts in `domain/`.
+     - **Phase 2 (Delivery Adapters)**: Moved `WSConnAdapter` to `api/controller/ws_adapter.go`. Decoupled `api/controller/stream_controller.go` from `usecase`. Created `HealthController` and wired into `api/route/route.go` for `/api/health` and `/api/ping`.
+     - **Phase 3 (Use Case Decoupling)**: Removed all forbidden imports (`websocket`, `infrastructure/adb`, `infrastructure/scrcpy`) from `usecase/stream_usecase.go` and `usecase/kiosk_watchdog.go`. `StreamUsecase` now depends strictly on `domain.DeviceCommander` and `domain.DeviceStreamerFactory`.
+     - **Phase 4 (Infrastructure Implementations)**: Implemented `domain.DeviceCommander` on `adb.Client`. Implemented `domain.DeviceStreamer` on `scrcpy.Server` and added `scrcpy.StreamerFactory`. Wired dependencies cleanly in `cmd/server/main.go`.
+     - **Phase 5 (Verification & Validation)**: Ran uncached test suite with race detector (`go test -v -count=1 -race ./...`, all 16 packages passed in ~1.3s). Confirmed zero forbidden imports via grep. Verified `go fmt` and `go vet`. Verified frontend test suite (62/62 passed) and production build.
+  2. Created walkthrough artifact `walkthrough.md`.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Audit and remediation complete. Ready for user inspection or commit.

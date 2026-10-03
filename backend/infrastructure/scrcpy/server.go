@@ -358,10 +358,26 @@ func (s *Server) cleanupProcess() {
 }
 
 // Close terminates process and all TCP socket connections (video, audio, control).
-func (s *Server) Close() {
+func (s *Server) Close() error {
 	s.cleanupProcess()
 	if s.videoPort != 0 && s.adb != nil {
 		_ = s.adb.ForwardRemove(context.Background(), s.serial, s.videoPort)
 		s.videoPort = 0
 	}
+	return nil
+}
+
+// StreamerFactory creates scrcpy Server instances implementing domain.DeviceStreamerFactory.
+type StreamerFactory struct {
+	adb *adb.Client
+}
+
+// NewStreamerFactory constructs a StreamerFactory.
+func NewStreamerFactory(adbClient *adb.Client) *StreamerFactory {
+	return &StreamerFactory{adb: adbClient}
+}
+
+// NewStreamer creates a new domain.DeviceStreamer instance for the given device serial.
+func (f *StreamerFactory) NewStreamer(serial string) domain.DeviceStreamer {
+	return NewServer(f.adb, serial)
 }

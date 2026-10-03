@@ -16,9 +16,22 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/user/android-browser-stream/backend/infrastructure/scrcpy"
+	"github.com/user/android-browser-stream/backend/domain"
 	"github.com/user/android-browser-stream/backend/usecase"
 )
+
+type testWSAdapter struct {
+	conn *websocket.Conn
+}
+
+func (a *testWSAdapter) ReadMessage(ctx context.Context) ([]byte, error) {
+	_, data, err := a.conn.Read(ctx)
+	return data, err
+}
+
+func (a *testWSAdapter) WriteMessage(ctx context.Context, data []byte) error {
+	return a.conn.Write(ctx, websocket.MessageBinary, data)
+}
 
 func TestRelayVideoAndControl_Pipes(t *testing.T) {
 	// Create mock video and control TCP pipes
@@ -40,7 +53,7 @@ func TestRelayVideoAndControl_Pipes(t *testing.T) {
 		defer conn.CloseNow()
 
 		relay := usecase.NewStreamRelay()
-		_ = relay.Relay(ctx, videoServer, controlServer, usecase.NewWSConnAdapter(conn))
+		_ = relay.Relay(ctx, videoServer, controlServer, &testWSAdapter{conn: conn})
 		close(serverDone)
 	}))
 	defer ts.Close()
@@ -53,7 +66,7 @@ func TestRelayVideoAndControl_Pipes(t *testing.T) {
 
 	// 1. Send simulated video packet into videoClient
 	nalData := []byte{0x00, 0x00, 0x00, 0x01, 0x65, 0x99}
-	ptsFlags := uint64(500000) | scrcpy.PTSKeyFlag
+	ptsFlags := uint64(500000) | domain.PTSKeyFlag
 
 	header := make([]byte, 12)
 	binary.BigEndian.PutUint64(header[0:8], ptsFlags)
@@ -74,8 +87,8 @@ func TestRelayVideoAndControl_Pipes(t *testing.T) {
 
 	// 3. Send simulated control message from WebSocket client (0x02 prefix + 32-byte touch)
 	touchPayload := make([]byte, 32)
-	touchPayload[0] = scrcpy.MsgTypeInjectTouchEvent
-	touchPayload[1] = scrcpy.ActionDown
+	touchPayload[0] = domain.MsgTypeInjectTouchEvent
+	touchPayload[1] = domain.ActionDown
 
 	wsControlMsg := append([]byte{usecase.ChannelControl}, touchPayload...)
 	err = clientConn.Write(ctx, websocket.MessageBinary, wsControlMsg)
@@ -145,7 +158,7 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 		relay.SetKioskEnabled(true)
 		relay.SetRecorder(rec)
 
-		_ = relay.Relay(ctx, videoServer, controlServer, usecase.NewWSConnAdapter(conn))
+		_ = relay.Relay(ctx, videoServer, controlServer, &testWSAdapter{conn: conn})
 	}))
 	defer ts.Close()
 
@@ -157,7 +170,7 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 	// 1. Verify recorder tees video packet
 	nalData := []byte{0x00, 0x00, 0x00, 0x01, 0x67, 0x42}
 	header := make([]byte, 12)
-	binary.BigEndian.PutUint64(header[0:8], uint64(1000)|scrcpy.PTSKeyFlag)
+	binary.BigEndian.PutUint64(header[0:8], uint64(1000)|domain.PTSKeyFlag)
 	binary.BigEndian.PutUint32(header[8:12], uint32(len(nalData)))
 
 	go func() {
@@ -176,7 +189,7 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 
 	// 2. Send blocked KEYCODE_HOME (3) over ChannelControl (0x02)
 	homeKeyPayload := make([]byte, 14)
-	homeKeyPayload[0] = scrcpy.MsgTypeInjectKeycode
+	homeKeyPayload[0] = domain.MsgTypeInjectKeycode
 	binary.BigEndian.PutUint32(homeKeyPayload[2:6], 3) // KEYCODE_HOME
 	wsMsg := append([]byte{usecase.ChannelControl}, homeKeyPayload...)
 	err = clientConn.Write(ctx, websocket.MessageBinary, wsMsg)
@@ -184,7 +197,7 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 
 	// Send allowed KEYCODE_A (29)
 	allowedKeyPayload := make([]byte, 14)
-	allowedKeyPayload[0] = scrcpy.MsgTypeInjectKeycode
+	allowedKeyPayload[0] = domain.MsgTypeInjectKeycode
 	binary.BigEndian.PutUint32(allowedKeyPayload[2:6], 29) // KEYCODE_A
 	wsAllowedMsg := append([]byte{usecase.ChannelControl}, allowedKeyPayload...)
 	err = clientConn.Write(ctx, websocket.MessageBinary, wsAllowedMsg)
@@ -194,12 +207,12 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 	receivedKey := make([]byte, 14)
 	_, err = io.ReadFull(controlClient, receivedKey)
 	require.NoError(t, err)
-	assert.Equal(t, byte(scrcpy.MsgTypeInjectKeycode), receivedKey[0])
+	assert.Equal(t, byte(domain.MsgTypeInjectKeycode), receivedKey[0])
 	assert.Equal(t, uint32(29), binary.BigEndian.Uint32(receivedKey[2:6]))
 
 	// 3. Send blocked top swipe (y = 10 < 15)
 	topSwipePayload := make([]byte, 32)
-	topSwipePayload[0] = scrcpy.MsgTypeInjectTouchEvent
+	topSwipePayload[0] = domain.MsgTypeInjectTouchEvent
 	binary.BigEndian.PutUint32(topSwipePayload[14:18], 10)   // y = 10
 	binary.BigEndian.PutUint16(topSwipePayload[20:22], 1920) // screenH = 1920
 	wsTopSwipe := append([]byte{usecase.ChannelControl}, topSwipePayload...)
@@ -208,7 +221,7 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 
 	// Send allowed center touch (y = 500)
 	centerTouchPayload := make([]byte, 32)
-	centerTouchPayload[0] = scrcpy.MsgTypeInjectTouchEvent
+	centerTouchPayload[0] = domain.MsgTypeInjectTouchEvent
 	binary.BigEndian.PutUint32(centerTouchPayload[14:18], 500)  // y = 500
 	binary.BigEndian.PutUint16(centerTouchPayload[20:22], 1920) // screenH = 1920
 	wsCenterTouch := append([]byte{usecase.ChannelControl}, centerTouchPayload...)
@@ -219,12 +232,12 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 	receivedTouch := make([]byte, 32)
 	_, err = io.ReadFull(controlClient, receivedTouch)
 	require.NoError(t, err)
-	assert.Equal(t, byte(scrcpy.MsgTypeInjectTouchEvent), receivedTouch[0])
+	assert.Equal(t, byte(domain.MsgTypeInjectTouchEvent), receivedTouch[0])
 	assert.Equal(t, uint32(500), binary.BigEndian.Uint32(receivedTouch[14:18]))
 
 	// 4. Verify bottom touch (y = 1850) passes through to app (navbar eliminated at OS level)
 	bottomTouchPayload := make([]byte, 32)
-	bottomTouchPayload[0] = scrcpy.MsgTypeInjectTouchEvent
+	bottomTouchPayload[0] = domain.MsgTypeInjectTouchEvent
 	binary.BigEndian.PutUint32(bottomTouchPayload[14:18], 1850) // y = 1850
 	binary.BigEndian.PutUint16(bottomTouchPayload[20:22], 1920) // screenH = 1920
 	wsBottomTouch := append([]byte{usecase.ChannelControl}, bottomTouchPayload...)
@@ -235,7 +248,7 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 	receivedTouch2 := make([]byte, 32)
 	_, err = io.ReadFull(controlClient, receivedTouch2)
 	require.NoError(t, err)
-	assert.Equal(t, byte(scrcpy.MsgTypeInjectTouchEvent), receivedTouch2[0])
+	assert.Equal(t, byte(domain.MsgTypeInjectTouchEvent), receivedTouch2[0])
 	assert.Equal(t, uint32(1850), binary.BigEndian.Uint32(receivedTouch2[14:18]))
 
 	clientConn.Close(websocket.StatusNormalClosure, "done")
@@ -263,7 +276,7 @@ func TestRelayAudio_Pipe(t *testing.T) {
 
 		relay := usecase.NewStreamRelay()
 		relay.SetAudioReader(audioServer)
-		_ = relay.Relay(ctx, videoServer, controlServer, usecase.NewWSConnAdapter(conn))
+		_ = relay.Relay(ctx, videoServer, controlServer, &testWSAdapter{conn: conn})
 		close(serverDone)
 	}))
 	defer ts.Close()

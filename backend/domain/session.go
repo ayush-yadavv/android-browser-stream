@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"io"
+	"net"
 	"time"
 )
 
@@ -96,4 +98,44 @@ type PrewarmedPool interface {
 	Start(ctx context.Context)
 	Stop()
 	Count() int
+}
+
+// PortPool defines contract for acquiring and releasing host ports.
+type PortPool interface {
+	Acquire() (int, error)
+	Release(port int)
+}
+
+// ADBDisconnector defines contract to terminate ADB connection for a device.
+type ADBDisconnector interface {
+	Disconnect(ctx context.Context, serial string) error
+}
+
+// ADBShellRunner defines contract to run shell commands on Android.
+type ADBShellRunner interface {
+	RunShell(ctx context.Context, serial string, args ...string) (string, error)
+}
+
+// DeviceCommander abstracts Android Debug Bridge device administration.
+type DeviceCommander interface {
+	ADBShellRunner
+	ADBDisconnector
+	Connect(ctx context.Context, host string, port int) error
+	WaitForBoot(ctx context.Context, serial string, timeout time.Duration) error
+	RunShellBackground(ctx context.Context, serial string, args ...string) error
+}
+
+// DeviceStreamer defines contract for an active scrcpy streaming server.
+type DeviceStreamer interface {
+	Start(ctx context.Context, localBinaryPath string, videoPort int, codecOpt ...VideoCodec) error
+	Close() error
+	Codec() VideoCodec
+	VideoConn() io.Reader
+	ControlConn() net.Conn
+	AudioConn() io.Reader
+}
+
+// DeviceStreamerFactory creates DeviceStreamer instances for given serials.
+type DeviceStreamerFactory interface {
+	NewStreamer(serial string) DeviceStreamer
 }

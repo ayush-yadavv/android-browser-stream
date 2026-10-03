@@ -19,6 +19,7 @@ import (
 	"github.com/user/android-browser-stream/backend/infrastructure/docker"
 	"github.com/user/android-browser-stream/backend/infrastructure/portpool"
 	"github.com/user/android-browser-stream/backend/infrastructure/recorder"
+	"github.com/user/android-browser-stream/backend/infrastructure/scrcpy"
 	"github.com/user/android-browser-stream/backend/repository"
 	"github.com/user/android-browser-stream/backend/usecase"
 )
@@ -95,8 +96,10 @@ func main() {
 
 	sessionUC := usecase.NewSessionUsecase(sessionRepo, dockerClient, pool, sessionCfg, env.ContextTimeout, sessionOpts...)
 	recorderFactory := recorder.NewFFmpegRecorderFactory("data/recordings")
+	streamerFactory := scrcpy.NewStreamerFactory(adbClient)
 	streamUC := usecase.NewStreamUsecase(
 		adbClient,
+		streamerFactory,
 		sessionRepo,
 		env.ScrcpyBinPath,
 		usecase.WithContainerRepo(dockerClient),
