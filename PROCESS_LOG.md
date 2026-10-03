@@ -1650,3 +1650,21 @@
   - None.
 - **User Decision / Next Step:**
   - Present update to user.
+
+### Entry 67
+- **Timestamp:** 2026-10-03T17:46:15+05:30
+- **User Prompt (Verbatim):**
+  ```
+  use shadcn scroll bars
+  ```
+- **Response & Actions Taken (Implemented shadcn ScrollArea & Custom Scrollbars):**
+  1. Consulted `modern-web-guidance` (`customize-scrollbar-color-and-thickness`) for standard `scrollbar-width` and `scrollbar-color` rules with WebKit fallbacks.
+  2. Installed `@radix-ui/react-scroll-area` into `frontend`.
+  3. Created shadcn `ScrollArea` component in [`frontend/src/components/ui/scroll-area.tsx`](frontend/src/components/ui/scroll-area.tsx) with custom styled track and hover-reactive thumb.
+  4. Configured global shadcn/Framer dark scrollbar styles in [`frontend/src/styles/globals.css`](frontend/src/styles/globals.css) using `--scrollbar-thumb: rgba(255,255,255,0.16)` and `scrollbar-width: thin`.
+  5. Integrated `<ScrollArea>` into [`frontend/src/components/HotkeysModal.tsx`](frontend/src/components/HotkeysModal.tsx) and [`frontend/src/components/SessionManager.tsx`](frontend/src/components/SessionManager.tsx) for smooth scrolling of session history and keyboard shortcuts.
+  6. Verified build and tests: `tsc && vite build` built cleanly; all 64 Vitest tests passing (`npm test`).
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Present implementation to user.

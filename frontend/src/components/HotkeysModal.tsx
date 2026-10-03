@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -6,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
+import { ScrollArea } from './ui/scroll-area';
 import { Keyboard } from 'lucide-react';
 
 interface HotkeysModalProps {
@@ -47,26 +47,28 @@ export const HotkeysModal: React.FC<HotkeysModalProps> = ({ isOpen, onClose }) =
           </DialogDescription>
         </DialogHeader>
 
-        <div className="divide-y divide-hairline mt-2 max-h-[60vh] overflow-y-auto">
-          {shortcuts.map((item, index) => (
-            <div key={index} className="py-2.5 flex items-center justify-between text-xs">
-              <div>
-                <span className="text-ink font-medium">{item.action}</span>
-                <span className="text-[11px] text-ink-muted block">{item.context}</span>
+        <ScrollArea className="max-h-[60vh] pr-3 mt-2">
+          <div className="divide-y divide-hairline">
+            {shortcuts.map((item, index) => (
+              <div key={index} className="py-2.5 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-ink font-medium">{item.action}</span>
+                  <span className="text-[11px] text-ink-muted block">{item.context}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {item.keys.map((k, kIdx) => (
+                    <kbd
+                      key={kIdx}
+                      className="px-2 py-0.5 rounded-md bg-surface-2 border border-hairline text-ink font-mono text-[11px] shadow-sm"
+                    >
+                      {k}
+                    </kbd>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                {item.keys.map((k, kIdx) => (
-                  <kbd
-                    key={kIdx}
-                    className="px-2 py-0.5 rounded-md bg-surface-2 border border-hairline text-ink font-mono text-[11px] shadow-sm"
-                  >
-                    {k}
-                  </kbd>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

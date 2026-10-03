@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { SessionData } from '../types/session';
 import { RecordingPlayerModal } from './RecordingPlayerModal';
+import { ScrollArea } from './ui/scroll-area';
 
 export interface LaunchOptions {
   kioskMode?: boolean;
@@ -338,60 +339,62 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               </Badge>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {pastSessions.slice(0, 6).map((s) => (
-                <div
-                  key={s.id}
-                  className="p-4 rounded-xl bg-surface-1 border border-hairline hover:border-white/20 transition-all flex flex-col justify-between gap-3"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <code className="text-xs font-mono font-medium text-white bg-surface-2 px-2 py-0.5 rounded">
-                        {s.id.slice(0, 8)}...{s.id.slice(-4)}
-                      </code>
-                      <Badge
-                        variant={s.recording ? 'accent' : 'secondary'}
-                        className="text-[10px] py-0 shrink-0"
-                      >
-                        {s.recording ? '🎥 Recorded' : 'Terminated'}
-                      </Badge>
+            <ScrollArea className="max-h-[380px] pr-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {pastSessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className="p-4 rounded-xl bg-surface-1 border border-hairline hover:border-white/20 transition-all flex flex-col justify-between gap-3"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <code className="text-xs font-mono font-medium text-white bg-surface-2 px-2 py-0.5 rounded">
+                          {s.id.slice(0, 8)}...{s.id.slice(-4)}
+                        </code>
+                        <Badge
+                          variant={s.recording ? 'accent' : 'secondary'}
+                          className="text-[10px] py-0 shrink-0"
+                        >
+                          {s.recording ? '🎥 Recorded' : 'Terminated'}
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[11px] text-ink-muted">
+                        {s.created_at && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>{new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </span>
+                        )}
+                        {s.kiosk_enabled && (
+                          <span className="text-amber-400 font-medium">· 🔒 Kiosk</span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-[11px] text-ink-muted">
-                      {s.created_at && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </span>
-                      )}
-                      {s.kiosk_enabled && (
-                        <span className="text-amber-400 font-medium">· 🔒 Kiosk</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {s.recording && (
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-hairline">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setSelectedSessionForVideo(s.id)}
-                        className="h-7 text-xs rounded-pill gap-1.5 px-3"
-                      >
-                        <Play className="w-3 h-3 fill-current" />
-                        <span>Watch Replay</span>
-                      </Button>
-                      <a href={`/api/sessions/${s.id}/recording`} download target="_blank" rel="noreferrer">
-                        <Button size="sm" variant="default" className="h-7 text-xs rounded-pill gap-1.5 px-3">
-                          <Download className="w-3 h-3" />
-                          <span>Download</span>
+                    {s.recording && (
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-hairline">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setSelectedSessionForVideo(s.id)}
+                          className="h-7 text-xs rounded-pill gap-1.5 px-3"
+                        >
+                          <Play className="w-3 h-3 fill-current" />
+                          <span>Watch Replay</span>
                         </Button>
-                      </a>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                        <a href={`/api/sessions/${s.id}/recording`} download target="_blank" rel="noreferrer">
+                          <Button size="sm" variant="default" className="h-7 text-xs rounded-pill gap-1.5 px-3">
+                            <Download className="w-3 h-3" />
+                            <span>Download</span>
+                          </Button>
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
         )}
       </section>
