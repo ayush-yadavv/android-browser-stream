@@ -14,7 +14,6 @@ import {
   Gamepad2,
   Cpu,
   Film,
-  Download,
   Copy,
   Check,
   Play,
@@ -443,19 +442,14 @@ export const SessionInspector: React.FC<SessionInspectorProps> = ({
             </div>
           </div>
 
-          {/* MP4 Recording Download Button if Recording was Enabled */}
+          {/* MP4 Recording Status Notice (Recording finalized only upon session termination) */}
           {recording && (
             <div className="p-3 rounded-xl bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Film className="w-4 h-4 text-accent-blue shrink-0" />
-                <span className="text-xs font-medium text-ink">Live MP4 Recording</span>
+                <span className="text-xs font-medium text-ink">fMP4 Video Recording</span>
               </div>
-              <a href={`/api/sessions/${sessionId}/recording`} download target="_blank" rel="noreferrer">
-                <Button size="sm" variant="default" className="text-xs gap-1.5 h-7 rounded-pill">
-                  <Download className="w-3 h-3" />
-                  <span>Download</span>
-                </Button>
-              </a>
+              <span className="text-[11px] text-ink-muted">Available after session ends</span>
             </div>
           )}
         </TabsContent>

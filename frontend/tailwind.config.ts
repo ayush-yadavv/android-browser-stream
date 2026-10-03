@@ -43,6 +43,9 @@ export default {
         '2xl-framer': '40px',
         section: '96px',
       },
+      screens: {
+        xs: '420px',
+      },
     },
   },
   plugins: [],

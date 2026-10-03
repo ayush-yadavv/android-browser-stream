@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Activity,
   CornerDownLeft,
+  Trash2,
 } from 'lucide-react';
 import { SessionData } from '../types/session';
 import { RecordingPlayerModal } from './RecordingPlayerModal';
@@ -39,6 +40,8 @@ interface SessionManagerProps {
   activeSlots?: number;
   maxSlots?: number;
   sessions?: SessionData[];
+  onDeleteSession?: (id: string) => Promise<void> | void;
+  onClearHistory?: () => Promise<void> | void;
 }
 
 type InstanceMode = 'standard' | 'kiosk';
@@ -50,10 +53,12 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   activeSlots = 0,
   maxSlots = 3,
   sessions = [],
+  onDeleteSession,
+  onClearHistory,
 }) => {
   const navigate = useNavigate();
   const [instanceMode, setInstanceMode] = useState<InstanceMode>('standard');
-  const [recordSession, setRecordSession] = useState<boolean>(false);
+  const [recordSession, setRecordSession] = useState<boolean>(true);
   const [selectedSessionForVideo, setSelectedSessionForVideo] = useState<string | null>(null);
 
   const kioskMode = instanceMode === 'kiosk';
@@ -62,12 +67,21 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   const isCapacityFull = availableSlots === 0 && activeSlots >= maxSlots;
 
   // Active (in-progress) sessions for Zeigarnik Effect (resume interrupted / ongoing tasks)
-  const activeSessions = sessions.filter(
-    (s) => s.status === 'streaming' || s.status === 'ready'
-  );
-  const pastSessions = sessions.filter(
-    (s) => s.status !== 'streaming' && s.status !== 'ready'
-  );
+  const activeSessions = [...sessions]
+    .filter((s) => s.status === 'streaming' || s.status === 'ready')
+    .sort((a, b) => {
+      const timeA = new Date(a.created_at || a.last_active_at || 0).getTime();
+      const timeB = new Date(b.created_at || b.last_active_at || 0).getTime();
+      return timeB - timeA;
+    });
+
+  const pastSessions = [...sessions]
+    .filter((s) => s.status !== 'streaming' && s.status !== 'ready')
+    .sort((a, b) => {
+      const timeA = new Date(a.created_at || a.last_active_at || 0).getTime();
+      const timeB = new Date(b.created_at || b.last_active_at || 0).getTime();
+      return timeB - timeA;
+    });
 
   // Keyboard shortcut listener for Doherty Threshold: 'Enter' launches immediately
   useEffect(() => {
@@ -93,54 +107,54 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   };
 
   return (
-    <div className="space-y-20 max-w-6xl mx-auto py-6 select-none font-body">
+    <div className="space-y-16 sm:space-y-20 max-w-6xl w-full mx-auto py-4 sm:py-6 select-none font-body overflow-x-hidden">
       {/* ─────────────────────────────────────────────────────────────
           1. HERO & PRIMARY LAUNCHPAD (Aesthetic-Usability & Fitts's Law)
           ───────────────────────────────────────────────────────────── */}
-      <section className="text-center space-y-6 pt-4 pb-2">
+      <section className="text-center space-y-6 pt-4 pb-2 w-full">
         {/* Eyebrow Badge (DESIGN.md) */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-pill bg-surface-1 border border-hairline text-xs font-medium text-ink-muted shadow-sm">
-          <Sparkles className="w-3.5 h-3.5 text-accent-blue" />
-          <span>DroidCanvas Engine v2.7</span>
-          <span className="w-1 h-1 rounded-full bg-hairline" />
-          <span className="text-ink">Sub-50ms Glass-to-Glass</span>
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-pill bg-surface-1 border border-hairline text-xs font-medium text-ink-muted shadow-sm max-w-full">
+          <Sparkles className="w-3.5 h-3.5 text-accent-blue shrink-0" />
+          <span className="truncate">DroidCanvas Engine v2.7</span>
+          <span className="w-1 h-1 rounded-full bg-hairline shrink-0" />
+          <span className="text-ink shrink-0">Sub-50ms Glass-to-Glass</span>
         </div>
 
         {/* Poster-Grade Display Headline (DESIGN.md: extreme negative tracking) */}
         <div className="space-y-3">
-          <h1 className="text-5xl sm:text-7xl lg:text-[76px] font-medium tracking-[-0.05em] leading-[0.92] text-white">
+          <h1 className="text-4xl sm:text-7xl lg:text-[76px] font-medium tracking-[-0.05em] leading-[0.95] sm:leading-[0.92] text-white break-words">
             Interactive Android.
             <br />
             <span className="text-ink-muted font-normal tracking-[-0.04em]">
               Directly in Your Browser.
             </span>
           </h1>
-          <p className="text-ink-muted max-w-2xl mx-auto text-base sm:text-lg leading-relaxed pt-2">
+          <p className="text-ink-muted max-w-2xl mx-auto text-sm sm:text-lg leading-relaxed pt-2 px-2">
             Zero plugins. Zero client downloads. Ephemeral Android 13 sandboxes rendered at 60 FPS
             directly onto your GPU with WebCodecs hardware decoding.
           </p>
         </div>
 
         {/* Primary Launch Action Area (Fitts's Law, Von Restorff Effect & Doherty Threshold) */}
-        <div className="flex flex-col items-center gap-5 pt-3">
+        <div className="flex flex-col items-center gap-5 pt-3 w-full">
           {/* Main Action Buttons */}
-          <div className="flex flex-wrap items-center justify-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 w-full">
             <Button
               onClick={() => onLaunch({ kioskMode, recordSession })}
               disabled={isLaunching || isCapacityFull}
               size="lg"
-              className="h-14 px-8 text-base font-medium rounded-pill gap-3 shadow-[0_0_35px_rgba(255,255,255,0.18)] hover:scale-[1.02] active:scale-[0.98] transition-all bg-white text-black hover:bg-neutral-200 cursor-pointer disabled:opacity-50"
+              className="h-12 sm:h-14 px-6 sm:px-8 text-sm sm:text-base font-medium rounded-pill gap-2.5 sm:gap-3 shadow-[0_0_35px_rgba(255,255,255,0.18)] hover:scale-[1.02] active:scale-[0.98] transition-all bg-white text-black hover:bg-neutral-200 cursor-pointer disabled:opacity-50 max-w-full"
             >
               {isLaunching ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin text-black" />
+                  <Loader2 className="w-5 h-5 animate-spin text-black shrink-0" />
                   <span>Provisioning Sandbox...</span>
                 </>
               ) : isCapacityFull ? (
                 <span>All Ephemeral Slots In Use</span>
               ) : (
                 <>
-                  <Play className="w-4 h-4 fill-current" />
+                  <Play className="w-4 h-4 fill-current shrink-0" />
                   <span>Launch Android Session</span>
                   <span className="hidden sm:inline-flex items-center gap-0.5 text-[11px] font-mono px-1.5 py-0.5 rounded bg-black/10 text-black/70">
                     <CornerDownLeft className="w-3 h-3" />
@@ -153,7 +167,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               <Button
                 variant="secondary"
                 size="lg"
-                className="h-14 px-7 text-sm font-medium rounded-pill bg-surface-1 border border-hairline hover:bg-surface-2 text-ink"
+                className="h-12 sm:h-14 px-5 sm:px-7 text-xs sm:text-sm font-medium rounded-pill bg-surface-1 border border-hairline hover:bg-surface-2 text-ink"
               >
                 System Architecture
               </Button>
@@ -161,37 +175,37 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           </div>
 
           {/* Quick Mode Selection & Recording Add-On (Hick's Law & Choice Overload / Chunking) */}
-          <div className="flex flex-col items-center gap-3 pt-1">
+          <div className="flex flex-col items-center gap-3 pt-1 w-full max-w-full">
             <span className="text-[11px] font-medium text-ink-muted uppercase tracking-wider">
               Launch Configuration &amp; Features
             </span>
-            <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 max-w-full">
               {/* Base Environment Mode Selector */}
-              <div className="inline-flex p-1 rounded-pill bg-surface-1 border border-hairline text-xs">
+              <div className="inline-flex p-1 rounded-pill bg-surface-1 border border-hairline text-xs max-w-full">
                 <button
                   type="button"
                   onClick={() => setInstanceMode('standard')}
-                  className={`px-4 py-2 rounded-pill font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-pill font-medium transition-all cursor-pointer flex items-center gap-1.5 text-xs ${
                     instanceMode === 'standard'
                       ? 'bg-surface-2 text-white shadow-sm'
                       : 'text-ink-muted hover:text-white'
                   }`}
                 >
-                  <Activity className="w-3.5 h-3.5 text-accent-blue" />
+                  <Activity className="w-3.5 h-3.5 text-accent-blue shrink-0" />
                   <span>Standard Android</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setInstanceMode('kiosk')}
-                  className={`px-4 py-2 rounded-pill font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-pill font-medium transition-all cursor-pointer flex items-center gap-1.5 text-xs ${
                     instanceMode === 'kiosk'
                       ? 'bg-surface-2 text-white shadow-sm'
                       : 'text-ink-muted hover:text-white'
                   }`}
                   title="Restricted Kiosk Mode: Locks container to AOSP DeskClock and filters navigation events."
                 >
-                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span>Kiosk Lockdown</span>
                 </button>
               </div>
@@ -200,7 +214,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               <button
                 type="button"
                 onClick={() => setRecordSession((prev) => !prev)}
-                className={`px-4 py-2 rounded-pill text-xs font-medium border transition-all cursor-pointer flex items-center gap-2 ${
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-pill text-xs font-medium border transition-all cursor-pointer flex items-center gap-2 max-w-full ${
                   recordSession
                     ? 'bg-surface-2 border-emerald-500/40 text-emerald-400 shadow-sm'
                     : 'bg-surface-1 border-hairline text-ink-muted hover:text-white hover:border-hairline/80'
@@ -208,11 +222,11 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                 title="Optional feature: Automatically captures lossless fragmented MP4 video of this session."
               >
                 <div
-                  className={`w-2 h-2 rounded-full transition-colors ${
+                  className={`w-2 h-2 rounded-full transition-colors shrink-0 ${
                     recordSession ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-neutral-600'
                   }`}
                 />
-                <Film className="w-3.5 h-3.5" />
+                <Film className="w-3.5 h-3.5 shrink-0" />
                 <span>Record Session (fMP4)</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
@@ -224,7 +238,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               </button>
             </div>
 
-            <p className="text-[11px] text-ink-muted text-center max-w-lg">
+            <p className="text-[11px] text-ink-muted text-center max-w-lg px-2">
               {instanceMode === 'standard' && !recordSession && 'Full interactive Android 13 OS with touch, keyboard, and audio streaming.'}
               {instanceMode === 'standard' && recordSession && 'Standard Android 13 OS with real-time fMP4 video capture enabled for replay & download.'}
               {instanceMode === 'kiosk' && !recordSession && 'Locked to AOSP DeskClock. Server-side drops Home, Recents, and Status Bar swipes.'}
@@ -323,67 +337,97 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
 
         {/* Past Sessions & Recorded Media Archive */}
         {pastSessions.length > 0 && (
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-3 pt-2 w-full max-w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-0.5">
                 <h2 className="text-base font-semibold text-white flex items-center gap-2">
-                  <Film className="w-4 h-4 text-accent-blue" />
+                  <Film className="w-4 h-4 text-accent-blue shrink-0" />
                   <span>Session History & Recordings</span>
                 </h2>
                 <p className="text-xs text-ink-muted">
                   Review recent ephemeral containers, watch in-browser video replays, or download fMP4 recordings.
                 </p>
               </div>
-              <Badge variant="outline" className="text-xs font-mono">
-                {pastSessions.length} total
-              </Badge>
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                {onClearHistory && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={onClearHistory}
+                    className="h-7 px-2.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-pill gap-1.5 transition-colors cursor-pointer"
+                    title="Clear all session history and delete recordings"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Clear History</span>
+                  </Button>
+                )}
+                <Badge variant="outline" className="text-xs font-mono">
+                  {pastSessions.length} total
+                </Badge>
+              </div>
             </div>
 
-            <ScrollArea className="max-h-[380px] pr-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <ScrollArea className="max-h-[520px] w-full max-w-full">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-1 pb-8 pr-1 sm:pr-3">
                 {pastSessions.map((s) => (
                   <div
                     key={s.id}
-                    className="p-4 rounded-xl bg-surface-1 border border-hairline hover:border-white/20 transition-all flex flex-col justify-between gap-3"
+                    className="p-3.5 sm:p-4 rounded-xl bg-surface-1 border border-hairline hover:border-white/20 transition-all flex flex-col justify-between gap-3 min-h-[135px] min-w-0"
                   >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <code className="text-xs font-mono font-medium text-white bg-surface-2 px-2 py-0.5 rounded">
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex items-center justify-between gap-2 min-w-0">
+                        <code className="text-xs font-mono font-medium text-white bg-surface-2 px-2 py-0.5 rounded truncate max-w-[130px] sm:max-w-none">
                           {s.id.slice(0, 8)}...{s.id.slice(-4)}
                         </code>
-                        <Badge
-                          variant={s.recording ? 'accent' : 'secondary'}
-                          className="text-[10px] py-0 shrink-0"
-                        >
-                          {s.recording ? '🎥 Recorded' : 'Terminated'}
-                        </Badge>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge
+                            variant={s.recording ? 'accent' : 'secondary'}
+                            className="text-[10px] py-0 shrink-0"
+                          >
+                            {s.recording ? '🎥 Recorded' : 'Terminated'}
+                          </Badge>
+                          {onDeleteSession && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onDeleteSession(s.id)}
+                              className="h-6 w-6 p-0 text-ink-muted hover:text-rose-400 hover:bg-rose-950/40 rounded-pill transition-colors cursor-pointer shrink-0"
+                              title="Delete session & recording"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2 text-[11px] text-ink-muted">
                         {s.created_at && (
                           <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            <span>{new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <Clock className="w-3 h-3 shrink-0" />
+                            <span>
+                              {new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
+                              {new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </span>
                         )}
                         {s.kiosk_enabled && (
-                          <span className="text-amber-400 font-medium">· 🔒 Kiosk</span>
+                          <span className="text-amber-400 font-medium shrink-0">· 🔒 Kiosk</span>
                         )}
                       </div>
                     </div>
 
                     {s.recording && (
-                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-hairline">
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-hairline flex-wrap">
                         <Button
                           size="sm"
                           variant="secondary"
                           onClick={() => setSelectedSessionForVideo(s.id)}
-                          className="h-7 text-xs rounded-pill gap-1.5 px-3"
+                          className="h-7 text-xs rounded-pill gap-1.5 px-3 shrink-0"
                         >
                           <Play className="w-3 h-3 fill-current" />
                           <span>Watch Replay</span>
                         </Button>
-                        <a href={`/api/sessions/${s.id}/recording`} download target="_blank" rel="noreferrer">
+                        <a href={`/api/sessions/${s.id}/recording?download=true`} download target="_blank" rel="noreferrer" className="shrink-0">
                           <Button size="sm" variant="default" className="h-7 text-xs rounded-pill gap-1.5 px-3">
                             <Download className="w-3 h-3" />
                             <span>Download</span>
@@ -500,12 +544,32 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         </div>
 
         <Tabs defaultValue="overview" className="w-full">
-          <div className="flex justify-center">
-            <TabsList>
-              <TabsTrigger value="overview">Pipeline Topology</TabsTrigger>
-              <TabsTrigger value="backend">Clean Architecture</TabsTrigger>
-              <TabsTrigger value="protocol">Wire Protocol</TabsTrigger>
-              <TabsTrigger value="webcodecs">WebCodecs GPU</TabsTrigger>
+          <div className="flex justify-center w-full max-w-full">
+            <TabsList className="grid grid-cols-2 sm:inline-flex w-full sm:w-auto h-auto sm:h-10 p-1 rounded-2xl sm:rounded-pill gap-1 sm:gap-0 max-w-md sm:max-w-none">
+              <TabsTrigger
+                value="overview"
+                className="rounded-xl sm:rounded-pill text-xs py-2 sm:py-1.5 px-2 sm:px-4 text-center whitespace-normal sm:whitespace-nowrap"
+              >
+                Pipeline Topology
+              </TabsTrigger>
+              <TabsTrigger
+                value="backend"
+                className="rounded-xl sm:rounded-pill text-xs py-2 sm:py-1.5 px-2 sm:px-4 text-center whitespace-normal sm:whitespace-nowrap"
+              >
+                Clean Architecture
+              </TabsTrigger>
+              <TabsTrigger
+                value="protocol"
+                className="rounded-xl sm:rounded-pill text-xs py-2 sm:py-1.5 px-2 sm:px-4 text-center whitespace-normal sm:whitespace-nowrap"
+              >
+                Wire Protocol
+              </TabsTrigger>
+              <TabsTrigger
+                value="webcodecs"
+                className="rounded-xl sm:rounded-pill text-xs py-2 sm:py-1.5 px-2 sm:px-4 text-center whitespace-normal sm:whitespace-nowrap"
+              >
+                WebCodecs GPU
+              </TabsTrigger>
             </TabsList>
           </div>
 

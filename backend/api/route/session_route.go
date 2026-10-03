@@ -18,7 +18,9 @@ func NewSessionRouter(sessionUC domain.SessionUsecase, streamUC domain.StreamUse
 	{
 		sessions.POST("", sessionCtrl.Create)
 		sessions.GET("", sessionCtrl.List)
+		sessions.DELETE("", sessionCtrl.ClearHistory)
 		sessions.GET("/:id", sessionCtrl.Get)
+		sessions.POST("/:id/stop", sessionCtrl.Stop)
 		sessions.DELETE("/:id", sessionCtrl.Delete)
 		sessions.GET("/:id/recording", sessionCtrl.GetRecording)
 

@@ -1688,3 +1688,158 @@
   - None.
 - **User Decision / Next Step:**
   - Resolved LaTeX math mode syntax error.
+---
+
+### Entry 69
+- **Timestamp:** 2026-10-03T21:25:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Automate the provisioning of an 8GB RAM Ubuntu 24.04 VM on Azure via Azure CLI, accounting for student subscription policy restrictions and regional capacity quotas. Calculate real-time daily operational costs via Azure Retail Prices API and configure persistent SSH host aliases and desktop launchers.
+  ```
+- **Response & Actions Taken (Automated Azure Cloud VM Provisioning & Environment Hardening):**
+  1. **Policy & Quota Resolution**:
+     - Audited Azure CLI configuration (`v2.89.1`) under `Azure for Students` subscription.
+     - Diagnosed subscription policy `sys.regionrestriction` and regional Public IP quotas; provisioned `Standard_B2s_v2` (2 vCPUs, 8.0 GiB RAM) in `koreacentral` with 64GB Premium SSD via automated script [`deploy/provision-azure-vm.sh`](deploy/provision-azure-vm.sh).
+  2. **Operational Cost Analysis**:
+     - Queried Azure Retail Prices API for `Standard_B2s_v2`, Premium SSD, and Public IPv4 address pricing in `koreacentral`, confirming an economical operational baseline of ~$2.94/day (approx. ₹245 INR/day).
+  3. **Environment Hardening & Developer Tooling**:
+     - Configured SSH keypair authentication, established host alias `droidcanvas` in `~/.ssh/config`, and created executable desktop launcher [`/home/ayush-yadav/Desktop/DroidCanvasAzure.desktop`](/home/ayush-yadav/Desktop/DroidCanvasAzure.desktop).
+     - Verified live VM system resources: 7.8 GiB RAM available, Ubuntu 24.04 kernel `6.17.0-1022-azure x86_64`.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Proceed with cloud production deployment.
+
+---
+
+### Entry 70
+- **Timestamp:** 2026-10-03T21:50:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Deploy the production DroidCanvas stack to the Azure VM under the custom domain droidcanvas.ay7.me. Configure Caddy with automatic Let's Encrypt TLS certificates, enforce strict HTTPS-only transport with HSTS headers, and eliminate all plain HTTP listeners.
+  ```
+- **Response & Actions Taken (Production Cloud Deployment, Caddy Auto-TLS & Strict HSTS):**
+  1. **Build & Cross-Compilation**:
+     - Built production frontend distribution (`npm run build` -> `frontend/dist`).
+     - Cross-compiled Go backend binary for `linux/amd64` with stripped debug symbols (`-w -s`).
+  2. **Remote Kernel & Binder Setup**:
+     - Installed `linux-modules-extra-6.17.0-1022-azure` on remote VM, mounted `binderfs` IPC devices (`/dev/binderfs`), and synchronized application assets via [`deploy/deploy.sh`](deploy/deploy.sh).
+  3. **Caddy TLS & HSTS Hardening**:
+     - Configured [`deploy/Caddyfile`](deploy/Caddyfile) for `droidcanvas.ay7.me` with automatic Let's Encrypt TLS certificates and HTTP/3 support on `:443`.
+     - Injected strict HTTP Strict Transport Security (`Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"`).
+     - Removed plain HTTP `:80` listeners completely, configuring automated `308 Permanent Redirect` on any legacy HTTP traffic.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Transition container runtime to Docker Compose production stack.
+
+---
+
+### Entry 71
+- **Timestamp:** 2026-10-03T22:15:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Transition VM runtime orchestration from host systemd services to pure Docker Compose (deploy/docker-compose.prod.yml). Scale the production pre-warmed container pool size to 2 (PREWARMED_POOL_SIZE=2) for instant failover, and configure environment variables for seamless compose log tailing.
+  ```
+- **Response & Actions Taken (Docker Compose Production Transition & Pre-Warmed Pool Sizing):**
+  1. **Compose Migration**:
+     - Disabled legacy host systemd daemons (`droidcanvas.service`, `caddy.service`) and migrated runtime orchestration strictly to [`deploy/docker-compose.prod.yml`](deploy/docker-compose.prod.yml).
+  2. **Pre-Warmed Pool Scaling**:
+     - Configured `PREWARMED_POOL_SIZE=2` in `deploy/docker-compose.prod.yml` and `deploy/deploy.sh`.
+     - Verified two concurrent Redroid containers (`redroid-session-5555-*` and `redroid-session-5556-*`) initialized and pre-warmed simultaneously on the remote VM.
+  3. **Developer Ergonomics**:
+     - Created `/home/azureuser/android-browser-stream/.env` defining `COMPOSE_FILE=deploy/docker-compose.prod.yml` and `COMPOSE_PROJECT_NAME=deploy`, enabling direct `docker compose logs -f` execution from the project root.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Investigate video recording variable-framerate desync bug.
+
+---
+
+### Entry 72
+- **Timestamp:** 2026-10-03T22:36:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Investigate video recording playback speed-up during low-framerate and static screen intervals. Eliminate naive raw Annex B frame stitching by implementing a zero-dependency in-memory MPEG-TS packetizer (ts_muxer.go) that encodes explicit 33-bit 90kHz Presentation Timestamps (PTS) in PES headers for FFmpeg recording pipelines.
+  ```
+- **Response & Actions Taken (Low-Level Video Engineering: In-Memory MPEG-TS 90kHz PTS Muxing):**
+  1. **Root Cause Analysis**:
+     - Naively feeding raw Annex B packets into FFmpeg via `-f h264` lacked container timestamps. During static screen intervals or low framerates (1–2 FPS), FFmpeg stitched delta frames contiguously, causing video to play back at accelerated speed.
+  2. **In-Memory MPEG-TS Packetizer ([`backend/infrastructure/recorder/ts_muxer.go`](backend/infrastructure/recorder/ts_muxer.go))**:
+     - Engineered zero-dependency TS packetizer emitting standard 188-byte transport stream packets (PAT, PMT).
+     - Converted Android microsecond presentation timestamps (`pkt.PTS`) to 33-bit 90kHz clock timestamps (`pts_90k = uint64(ptsUs * 90 / 1000)`).
+     - Packaged H.264 NAL units into 14-byte PES headers with PTS, automatically buffering and prepending SPS/PPS parameter sets before IDR keyframes.
+  3. **FFmpeg Recording Integration**:
+     - Updated [`backend/domain/recording.go`](backend/domain/recording.go) and [`backend/infrastructure/recorder/recorder.go`](backend/infrastructure/recorder/recorder.go) to consume `-f mpegts -i pipe:0 -c:v copy`, guaranteeing frame-accurate wallclock duration regardless of framerate fluctuations.
+  4. **Verification**:
+     - Implemented comprehensive unit tests in `recorder_test.go` and verified 6.0s wallclock duration with `ffprobe`.
+- **Errors / Failures Encountered:**
+  - Variable framerate timestamp desync resolved.
+- **User Decision / Next Step:**
+  - Enforce strict session recording lifecycle and history management.
+
+---
+
+### Entry 73
+- **Timestamp:** 2026-10-03T22:58:00+05:30
+- **User Prompt (Verbatim):**
+  ```
+  Enforce strict session and recording lifecycle state machines: prohibit recording access during active streams, add cascading history and disk recording purge APIs, enable recording by default, sort session history latest-first, and fix bottom card padding in the ScrollArea component.
+  ```
+- **Response & Actions Taken (Session & Recording Lifecycle State Machine, Disk Purging & UI Ordering):**
+  1. **Lifecycle State Machine Guard**:
+     - Updated [`frontend/src/components/SessionInspector.tsx`](frontend/src/components/SessionInspector.tsx) and [`frontend/src/components/SessionManager.tsx`](frontend/src/components/SessionManager.tsx) to strictly hide/disable video playback and download controls while session status is `streaming` or `active`.
+  2. **Cascading Delete API**:
+     - Implemented `DeleteSession` in [`backend/usecase/session_usecase.go`](backend/usecase/session_usecase.go) and [`backend/repository/session_repository.go`](backend/repository/session_repository.go) executing transactional deletion of database records and secure deletion of associated `.mp4` video files from disk.
+     - Registered `DELETE /api/sessions/:id/history` endpoint in [`backend/api/controller/session_controller.go`](backend/api/controller/session_controller.go) and wired UI delete action with confirmation modal.
+  3. **Default-On Recording & Sorting**:
+     - Configured recording enabled by default on session launch.
+     - Sorted session history latest-first in both repository SQLite query (`ORDER BY datetime(created_at) DESC`) and frontend `SessionManager.tsx`.
+     - Fixed `ScrollArea` bottom card clipping by applying explicit bottom padding (`pb-6`).
+  4. **Verification**:
+     - All 64 Vitest unit tests passed; Go backend unit and integration test suites passing uncached with race detector (`go test -count=1 -race ./...`).
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Pre-commit code review of staged changes.
+
+---
+
+### Entry 74
+- **Timestamp:** 2026-10-03T22:57:45+05:30
+- **User Prompt (Verbatim):**
+  ```
+  /code-review uncomitted(only staged)
+  ```
+- **Response & Actions Taken (Pre-Commit Code Review of Staged Changes):**
+  1. Verified 26 staged files (+1181/-256 lines).
+  2. Performed multi-agent review identifying 5 high-confidence issues:
+     - Issue 1 (Score: 95): `deploy.sh` skips rebuilding frontend/backend when files exist.
+     - Issue 2 (Score: 90): Bitmask `0xF0` in PAT creation clobbers PID bit 12 (`ts_muxer.go:215`).
+     - Issue 3 (Score: 85): Public exposure of port 8080 in Azure NSG (`provision-azure-vm.sh:114`).
+     - Issue 4 (Score: 80): `Content-Disposition: attachment` breaks in-browser playback (`session_controller.go:179`).
+     - Issue 5 (Score: 75): Silent error suppression in `ClearSessionHistory` (`session_usecase.go:310`).
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - User requested to fix all 5 issues.
+
+---
+
+### Entry 75
+- **Timestamp:** 2026-10-03T23:05:13+05:30
+- **User Prompt (Verbatim):**
+  ```
+  fix all 5
+  ```
+- **Response & Actions Taken (Fixing All 5 Identified Issues):**
+  1. Fixing `deploy.sh` to unconditionally rebuild frontend and recompile backend binary on deployment.
+  2. Fixing `ts_muxer.go` PAT reserved bits mask from `0xF0` to `0xE0`.
+  3. Removing insecure public NSG rule for port 8080 in `provision-azure-vm.sh`.
+  4. Updating `session_controller.go` to use `inline` content disposition by default (and `attachment` when `?download=true`).
+  5. Updating `session_usecase.go` `ClearSessionHistory` to track and propagate batch deletion errors.
+  6. Running test suites and validating all changes.
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Verify all test suites pass and report fixes to user.

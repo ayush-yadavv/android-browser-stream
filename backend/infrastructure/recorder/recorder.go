@@ -28,6 +28,8 @@ func findFFmpegBinary() (string, error) {
 		return bin, nil
 	}
 	candidates := []string{
+		"../../bin/ffmpeg",
+		"../bin/ffmpeg",
 		"backend/bin/ffmpeg",
 		"./bin/ffmpeg",
 		"/usr/local/bin/ffmpeg",
@@ -53,24 +55,33 @@ func (f *FFmpegRecorderFactory) CreateRecorder(ctx context.Context, sessionID st
 	ffmpegBin, err := findFFmpegBinary()
 	if err == nil {
 		outputPath := filepath.Join(f.outputDir, fmt.Sprintf("%s.mp4", sessionID))
-		// Use FFmpeg for fragmented MP4 multiplexing without transcoding
-		ffmpegFormat := "h264"
-		switch codec {
-		case domain.CodecH265:
-			ffmpegFormat = "hevc"
-		case domain.CodecAV1:
-			ffmpegFormat = "av1"
-		}
 
-		cmd := exec.Command(ffmpegBin,
-			"-y",
-			"-f", ffmpegFormat,
-			"-r", "60",
-			"-i", "pipe:0",
-			"-c:v", "copy",
-			"-movflags", "frag_keyframe+empty_moov+default_base_moof",
-			outputPath,
-		)
+		var tsMuxer *TSMuxer
+		var cmd *exec.Cmd
+
+		if codec == domain.CodecAV1 {
+			// Fallback for AV1 raw OBU stream if requested
+			cmd = exec.Command(ffmpegBin,
+				"-y",
+				"-f", "av1",
+				"-i", "pipe:0",
+				"-c:v", "copy",
+				"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+				outputPath,
+			)
+		} else {
+			// For H264 and H265, encapsulate in MPEG-TS with microsecond PTS mapped to 90kHz clock.
+			// This allows FFmpeg to preserve exact variable framerate (VFR) timestamps without transcoding.
+			tsMuxer = NewTSMuxer(codec)
+			cmd = exec.Command(ffmpegBin,
+				"-y",
+				"-f", "mpegts",
+				"-i", "pipe:0",
+				"-c:v", "copy",
+				"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+				outputPath,
+			)
+		}
 
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
@@ -85,7 +96,8 @@ func (f *FFmpegRecorderFactory) CreateRecorder(ctx context.Context, sessionID st
 		rec := &ffmpegRecorder{
 			cmd:     cmd,
 			writer:  stdin,
-			queue:   make(chan []byte, 120),
+			tsMuxer: tsMuxer,
+			queue:   make(chan *domain.VideoPacket, 120),
 			done:    make(chan struct{}),
 			outPath: outputPath,
 		}
@@ -110,7 +122,7 @@ func (f *FFmpegRecorderFactory) CreateRecorder(ctx context.Context, sessionID st
 	rec := &ffmpegRecorder{
 		file:    file,
 		writer:  file,
-		queue:   make(chan []byte, 120),
+		queue:   make(chan *domain.VideoPacket, 120),
 		done:    make(chan struct{}),
 		outPath: rawOutputPath,
 	}
@@ -122,7 +134,8 @@ type ffmpegRecorder struct {
 	cmd       *exec.Cmd
 	file      *os.File
 	writer    io.WriteCloser
-	queue     chan []byte
+	tsMuxer   *TSMuxer
+	queue     chan *domain.VideoPacket
 	done      chan struct{}
 	closeOnce sync.Once
 	closed    bool
@@ -130,7 +143,11 @@ type ffmpegRecorder struct {
 	outPath   string
 }
 
-func (r *ffmpegRecorder) WritePacket(data []byte) {
+func (r *ffmpegRecorder) WritePacket(pkt *domain.VideoPacket) {
+	if pkt == nil || len(pkt.Data) == 0 {
+		return
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if r.closed {
@@ -138,12 +155,18 @@ func (r *ffmpegRecorder) WritePacket(data []byte) {
 	}
 
 	// Clone buffer to avoid data races with caller reuse
-	buf := make([]byte, len(data))
-	copy(buf, data)
+	buf := make([]byte, len(pkt.Data))
+	copy(buf, pkt.Data)
+	p := &domain.VideoPacket{
+		PTS:        pkt.PTS,
+		IsConfig:   pkt.IsConfig,
+		IsKeyFrame: pkt.IsKeyFrame,
+		Data:       buf,
+	}
 
 	// Non-blocking write: if queue is full, drop packet to preserve real-time streaming SLA
 	select {
-	case r.queue <- buf:
+	case r.queue <- p:
 	default:
 		// Queue full, drop packet
 	}
@@ -151,9 +174,28 @@ func (r *ffmpegRecorder) WritePacket(data []byte) {
 
 func (r *ffmpegRecorder) run() {
 	defer close(r.done)
+
+	// Emit MPEG-TS PAT & PMT tables if muxing
+	if r.writer != nil && r.tsMuxer != nil {
+		initHeaders := r.tsMuxer.InitHeaders()
+		if len(initHeaders) > 0 {
+			_, _ = r.writer.Write(initHeaders)
+		}
+	}
+
 	for pkt := range r.queue {
-		if r.writer != nil && len(pkt) > 0 {
-			_, _ = r.writer.Write(pkt)
+		if r.writer == nil || pkt == nil {
+			continue
+		}
+		if r.tsMuxer != nil {
+			tsData := r.tsMuxer.Packetize(pkt)
+			if len(tsData) > 0 {
+				_, _ = r.writer.Write(tsData)
+			}
+		} else {
+			if len(pkt.Data) > 0 {
+				_, _ = r.writer.Write(pkt.Data)
+			}
 		}
 	}
 	if r.writer != nil {

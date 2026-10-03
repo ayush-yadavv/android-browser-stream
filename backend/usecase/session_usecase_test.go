@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -382,3 +383,73 @@ func TestSessionUsecase_CreateSession_FallsBackWhenPrewarmedPoolEmpty(t *testing
 	assert.Equal(t, 1, fakeDocker.createCalls)
 	assert.Equal(t, 1, prewarmedMock.acquireN)
 }
+
+func TestSessionUsecase_DeleteSession(t *testing.T) {
+	uc, sessionRepo, fakeDocker, _ := setupUsecase(t, 3)
+	ctx := context.Background()
+
+	// 1. Create a session with a dummy recording file
+	session, err := uc.CreateSession(ctx, domain.CreateSessionOptions{
+		Recording: true,
+	})
+	require.NoError(t, err)
+
+	tmpRecFile, err := os.CreateTemp("", "session-rec-*.mp4")
+	require.NoError(t, err)
+	defer os.Remove(tmpRecFile.Name()) // clean up just in case
+	_, _ = tmpRecFile.WriteString("dummy mp4")
+	tmpRecFile.Close()
+
+	err = sessionRepo.UpdateRecordingPath(ctx, session.ID, tmpRecFile.Name())
+	require.NoError(t, err)
+
+	// 2. Call DeleteSession while active: should terminate container, delete file from disk, and delete from DB
+	err = uc.DeleteSession(ctx, session.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, fakeDocker.stopCalls)
+	assert.Equal(t, 1, fakeDocker.removeCalls)
+
+	// File on disk must be gone
+	_, err = os.Stat(tmpRecFile.Name())
+	assert.True(t, os.IsNotExist(err), "recording file on disk should be deleted")
+
+	// Session in DB must be gone
+	_, err = sessionRepo.GetByID(ctx, session.ID)
+	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
+}
+
+func TestSessionUsecase_ClearSessionHistory(t *testing.T) {
+	uc, sessionRepo, _, _ := setupUsecase(t, 3)
+	ctx := context.Background()
+
+	// Create 2 sessions
+	s1, err := uc.CreateSession(ctx)
+	require.NoError(t, err)
+	s2, err := uc.CreateSession(ctx)
+	require.NoError(t, err)
+
+	// Terminate s1 and s2
+	_ = uc.DestroySession(ctx, s1.ID)
+	_ = uc.DestroySession(ctx, s2.ID)
+
+	// Create s3 which remains active
+	s3, err := uc.CreateSession(ctx)
+	require.NoError(t, err)
+
+	// Clear history
+	err = uc.ClearSessionHistory(ctx)
+	require.NoError(t, err)
+
+	// s1 and s2 should be deleted
+	_, err = sessionRepo.GetByID(ctx, s1.ID)
+	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
+	_, err = sessionRepo.GetByID(ctx, s2.ID)
+	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
+
+	// Active s3 should still exist
+	activeS3, err := sessionRepo.GetByID(ctx, s3.ID)
+	require.NoError(t, err)
+	assert.Equal(t, s3.ID, activeS3.ID)
+}
+

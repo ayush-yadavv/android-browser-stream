@@ -3,7 +3,19 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+  @supports (overflow-x: clip) {
+    html {
+      overflow-x: clip;
+    }
+  }
+
   body {
+    overflow-x: hidden;
+    max-width: 100vw;
     background-color: #080808;
     color: #ffffff;
     font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -11,6 +23,20 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  @supports (overflow-x: clip) {
+    body {
+      overflow-x: clip;
+    }
+  }
+}
+
+/* Hide scrollbar utilities */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Framer typography tracking helpers per DESIGN.md */

@@ -10,6 +10,7 @@ CYAN='\033[0;36m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 echo -e "${CYAN}============================================================${NC}"
@@ -89,44 +90,37 @@ npm run build
 echo -e "${GREEN}[OK] Frontend built successfully: ${PROJECT_ROOT}/frontend/dist${NC}"
 
 # 6. Build Go Backend Service Binary
+mkdir -p "${PROJECT_ROOT}/backend/data"
 echo -e "[4/7] Compiling Go Backend Service..."
 cd "${PROJECT_ROOT}/backend"
 go build -ldflags="-w -s" -o server ./cmd/server
 echo -e "${GREEN}[OK] Backend binary compiled: ${PROJECT_ROOT}/backend/server${NC}"
 
-# 7. Configure and install systemd unit
-echo -e "[5/7] Installing systemd service (droidcanvas.service)..."
-SERVICE_SRC="${PROJECT_ROOT}/deploy/droidcanvas.service"
-SERVICE_DEST="/etc/systemd/system/droidcanvas.service"
-
-# Dynamically patch paths if project root is not /opt/android-browser-stream
-sed "s|/opt/android-browser-stream|${PROJECT_ROOT}|g" "${SERVICE_SRC}" > "${SERVICE_DEST}"
-systemctl daemon-reload
-systemctl enable droidcanvas
-systemctl restart droidcanvas
-echo -e "${GREEN}[OK] droidcanvas.service started and enabled on boot.${NC}"
-
-# 8. Configure Caddy reverse proxy
-echo -e "[6/7] Updating Caddy configuration..."
-CADDYFILE_DEST="/etc/caddy/Caddyfile"
-mkdir -p /etc/caddy
-
-# Dynamically inject frontend dist path
-sed "s|/srv/frontend/dist|${PROJECT_ROOT}/frontend/dist|g" "${PROJECT_ROOT}/deploy/Caddyfile" > "${CADDYFILE_DEST}"
-
-# Dynamically inject domain if provided
-if [ -n "${DOMAIN}" ]; then
-    echo -e "[*] Configuring Caddy with Let's Encrypt TLS for domain: ${DOMAIN}"
-    sed -i "s|{\$DOMAIN:localhost}|${DOMAIN}|g" "${CADDYFILE_DEST}"
+# 7. Stop legacy host systemd services if present to prevent port conflicts
+if systemctl is-active --quiet droidcanvas 2>/dev/null; then
+    echo -e "[*] Stopping legacy host droidcanvas.service..."
+    systemctl stop droidcanvas || true
+    systemctl disable droidcanvas 2>/dev/null || true
+fi
+if systemctl is-active --quiet caddy 2>/dev/null; then
+    echo -e "[*] Stopping legacy host caddy.service..."
+    systemctl stop caddy || true
+    systemctl disable caddy 2>/dev/null || true
 fi
 
-if systemctl is-active --quiet caddy; then
-    systemctl reload caddy
-    echo -e "${GREEN}[OK] Caddy reloaded.${NC}"
-else
-    systemctl enable --now caddy
-    echo -e "${GREEN}[OK] Caddy started.${NC}"
-fi
+# 8. Deploy full stack via Docker Compose
+echo -e "[5/7] Deploying full application stack via docker-compose.prod.yml..."
+cd "${PROJECT_ROOT}"
+export DOMAIN="${DOMAIN:-droidcanvas.ay7.me}"
+export PREWARMED_POOL_SIZE="${PREWARMED_POOL_SIZE:-2}"
+cat <<EOF > "${PROJECT_ROOT}/.env"
+COMPOSE_FILE=deploy/docker-compose.prod.yml
+COMPOSE_PROJECT_NAME=deploy
+DOMAIN=${DOMAIN}
+PREWARMED_POOL_SIZE=${PREWARMED_POOL_SIZE}
+EOF
+docker compose up -d --build
+echo -e "${GREEN}[OK] Docker compose stack is running.${NC}"
 
 # 9. Healthcheck verification
 echo -e "[7/7] Verifying backend health..."
@@ -136,7 +130,7 @@ if echo "${HEALTH_RESP}" | grep -qE '"status":"(healthy|ok)"'; then
     echo -e "${GREEN}[OK] DroidCanvas backend is healthy: ${HEALTH_RESP}${NC}"
 else
     echo -e "${RED}[ERROR] Health check failed: ${HEALTH_RESP:-No response from backend}${NC}"
-    echo -e "${YELLOW}Check logs via: sudo journalctl -u droidcanvas -n 30 --no-pager${NC}"
+    echo -e "${YELLOW}Check logs via: docker compose logs -f${NC}"
     exit 1
 fi
 

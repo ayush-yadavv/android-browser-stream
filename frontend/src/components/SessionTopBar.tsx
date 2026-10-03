@@ -62,14 +62,14 @@ export const SessionTopBar: React.FC<SessionTopBarProps> = ({
   };
 
   return (
-    <header className="w-full h-14 bg-surface-1/70 backdrop-blur-md border-b border-hairline px-3 sm:px-6 flex items-center justify-between transition-all select-none">
+    <header className="w-full h-14 bg-surface-1/70 backdrop-blur-md border-b border-hairline px-2 sm:px-6 flex items-center justify-between transition-all select-none max-w-full overflow-hidden">
       {/* Left: Navigation Breadcrumb & Session Identity */}
-      <div className="flex items-center space-x-2 sm:space-x-3 truncate">
+      <div className="flex items-center space-x-1.5 sm:space-x-3 min-w-0">
         <Button
           variant="ghost"
           size="sm"
           onClick={onEndSession}
-          className="gap-1.5 text-ink-muted hover:text-ink -ml-1 sm:-ml-2 h-9 px-2 sm:px-3 text-xs"
+          className="gap-1 sm:gap-1.5 text-ink-muted hover:text-ink -ml-1 sm:-ml-2 h-8 sm:h-9 px-2 sm:px-3 text-xs shrink-0"
           title="Return to Dashboard (Esc)"
         >
           <ArrowLeft className="w-4 h-4 shrink-0" />
@@ -79,10 +79,10 @@ export const SessionTopBar: React.FC<SessionTopBarProps> = ({
         <div className="h-4 w-px bg-hairline shrink-0" />
 
         {/* Device Badges */}
-        <div className="flex items-center space-x-2 truncate">
-          <div className="flex items-center space-x-1.5 shrink-0">
-            <Smartphone className="w-4 h-4 text-accent-blue" />
-            <h2 className="text-xs sm:text-sm font-semibold text-ink">Redroid 13</h2>
+        <div className="flex items-center space-x-1.5 sm:space-x-2 min-w-0">
+          <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+            <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-accent-blue shrink-0" />
+            <h2 className="text-xs sm:text-sm font-semibold text-ink truncate max-w-[70px] xs:max-w-none">Redroid 13</h2>
           </div>
 
           <Badge variant="outline" className="font-mono text-[10px] hidden lg:inline-flex shrink-0">
@@ -93,7 +93,7 @@ export const SessionTopBar: React.FC<SessionTopBarProps> = ({
           {kioskEnabled && (
             <Badge
               variant="outline"
-              className="text-[10px] border-amber-500/40 text-amber-300 bg-amber-500/10 shrink-0 font-medium"
+              className="text-[10px] border-amber-500/40 text-amber-300 bg-amber-500/10 shrink-0 font-medium px-1.5 py-0"
             >
               🔒 Kiosk
             </Badge>
@@ -103,10 +103,11 @@ export const SessionTopBar: React.FC<SessionTopBarProps> = ({
           {recording && (
             <Badge
               variant="outline"
-              className="text-[10px] border-red-500/40 text-red-300 bg-red-500/10 flex items-center gap-1 shrink-0 font-mono"
+              className="text-[10px] border-red-500/40 text-red-300 bg-red-500/10 flex items-center gap-1 shrink-0 font-mono px-1.5 sm:px-2 py-0"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-              <span>REC {formatDuration(recordingDurationSec)}</span>
+              <span className="hidden xs:inline">REC {formatDuration(recordingDurationSec)}</span>
+              <span className="xs:hidden">REC</span>
             </Badge>
           )}
 
@@ -130,10 +131,10 @@ export const SessionTopBar: React.FC<SessionTopBarProps> = ({
       </div>
 
       {/* Right: Studio Control Actions */}
-      <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+      <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
         {/* Audio Mute & Volume Control Pill */}
         {onToggleMute && (
-          <div className="flex items-center bg-surface-2 border border-hairline rounded-full h-8 sm:h-9 px-2 gap-1.5 transition-all">
+          <div className="flex items-center bg-surface-2 border border-hairline rounded-full h-8 sm:h-9 px-1.5 sm:px-2 gap-1 sm:gap-1.5 transition-all">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -184,7 +185,7 @@ export const SessionTopBar: React.FC<SessionTopBarProps> = ({
               variant="secondary"
               size="sm"
               onClick={onToggleInputMode}
-              className={`h-8 sm:h-9 px-2 sm:px-3 text-xs gap-1.5 rounded-full transition-all active:scale-95 ${
+              className={`h-8 sm:h-9 px-2 sm:px-3 text-xs gap-1 sm:gap-1.5 rounded-full transition-all active:scale-95 ${
                 inputMode === 'dpad'
                   ? 'bg-accent-blue/15 border-accent-blue/40 text-accent-blue'
                   : 'border-hairline text-ink-muted hover:text-ink'
@@ -207,12 +208,12 @@ export const SessionTopBar: React.FC<SessionTopBarProps> = ({
           <TooltipContent>Switch between Touch and D-pad TV navigation (Alt+M)</TooltipContent>
         </Tooltip>
 
-        {/* Hotkeys Cheatsheet Dialog Trigger */}
+        {/* Hotkeys Cheatsheet Dialog Trigger - Desktop only */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={onOpenHotkeys}
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-surface-2 border border-hairline flex items-center justify-center text-ink-muted hover:text-ink transition-colors cursor-pointer active:scale-95"
+              className="hidden sm:flex w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-surface-2 border border-hairline items-center justify-center text-ink-muted hover:text-ink transition-colors cursor-pointer active:scale-95"
               aria-label="Keyboard Shortcuts"
             >
               <Keyboard className="w-4 h-4" />
@@ -240,7 +241,7 @@ export const SessionTopBar: React.FC<SessionTopBarProps> = ({
           variant="default"
           size="sm"
           onClick={onEndSession}
-          className="h-8 sm:h-9 px-3 sm:px-4 text-xs font-medium rounded-pill gap-1.5 shadow-sm active:scale-95"
+          className="h-8 sm:h-9 px-2.5 sm:px-4 text-xs font-medium rounded-pill gap-1 sm:gap-1.5 shadow-sm active:scale-95"
           title="Terminate Session"
         >
           <Power className="w-3.5 h-3.5 text-neutral-900" />

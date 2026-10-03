@@ -32,6 +32,12 @@ func (m *mockSessionUCForStream) ListSessions(ctx context.Context) ([]*domain.Se
 func (m *mockSessionUCForStream) DestroySession(ctx context.Context, id string) error {
 	return nil
 }
+func (m *mockSessionUCForStream) DeleteSession(ctx context.Context, id string) error {
+	return nil
+}
+func (m *mockSessionUCForStream) ClearSessionHistory(ctx context.Context) error {
+	return nil
+}
 func (m *mockSessionUCForStream) CleanupStaleSessions(ctx context.Context, idleThreshold time.Duration) error {
 	return nil
 }

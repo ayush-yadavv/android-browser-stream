@@ -53,7 +53,7 @@ export const DashboardPage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           kiosk_mode: opts?.kioskMode ?? false,
-          record_session: opts?.recordSession ?? false,
+          record_session: opts?.recordSession ?? true,
         }),
       });
 
@@ -73,6 +73,28 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  const handleDeleteSession = async (id: string) => {
+    try {
+      const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+      }
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    try {
+      const res = await fetch('/api/sessions', { method: 'DELETE' });
+      if (res.ok) {
+        setSessions((prev) => prev.filter((s) => s.status !== 'terminated'));
+      }
+    } catch (err) {
+      console.error('Failed to clear history:', err);
+    }
+  };
+
   return (
     <SessionManager
       onLaunch={handleLaunchSession}
@@ -81,6 +103,8 @@ export const DashboardPage: React.FC = () => {
       activeSlots={activeSlots}
       maxSlots={maxSlots}
       sessions={sessions}
+      onDeleteSession={handleDeleteSession}
+      onClearHistory={handleClearHistory}
     />
   );
 };

@@ -122,7 +122,7 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 			}
 
 			if r.recorder != nil {
-				r.recorder.WritePacket(pkt.Data)
+				r.recorder.WritePacket(pkt)
 			}
 
 			// Packet structure: [channel:1][pts_flags:8][size:4][data:N]

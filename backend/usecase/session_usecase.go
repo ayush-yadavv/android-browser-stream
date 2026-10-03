@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -265,6 +266,56 @@ func (u *sessionUsecase) CleanupStaleSessions(ctx context.Context, idleThreshold
 
 	for _, s := range staleSessions {
 		_ = u.DestroySession(ctx, s.ID)
+	}
+
+	return nil
+}
+
+func (u *sessionUsecase) DeleteSession(ctx context.Context, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, u.timeout)
+	defer cancel()
+
+	session, err := u.sessionRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// If session is still active, terminate container and clean up network resources first
+	if session.Status != domain.SessionStatusTerminated && session.Status != domain.SessionStatusTerminating {
+		_ = u.DestroySession(ctx, id)
+	}
+
+	// Remove recording file from disk if present
+	if session.RecordingPath != "" {
+		_ = os.Remove(session.RecordingPath)
+	}
+
+	return u.sessionRepo.Delete(ctx, id)
+}
+
+func (u *sessionUsecase) ClearSessionHistory(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, u.timeout)
+	defer cancel()
+
+	sessions, err := u.sessionRepo.List(ctx)
+	if err != nil {
+		return fmt.Errorf("retrieve sessions for history cleanup: %w", err)
+	}
+
+	var delErrors []error
+	for _, s := range sessions {
+		if s.Status == domain.SessionStatusTerminated {
+			if s.RecordingPath != "" {
+				_ = os.Remove(s.RecordingPath)
+			}
+			if err := u.sessionRepo.Delete(ctx, s.ID); err != nil {
+				delErrors = append(delErrors, fmt.Errorf("delete session %s: %w", s.ID, err))
+			}
+		}
+	}
+
+	if len(delErrors) > 0 {
+		return fmt.Errorf("cleared history with %d error(s), first error: %w", len(delErrors), delErrors[0])
 	}
 
 	return nil

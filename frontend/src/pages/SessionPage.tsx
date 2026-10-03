@@ -4,6 +4,14 @@ import { DeviceCanvas } from '../components/DeviceCanvas';
 import { SessionTopBar } from '../components/SessionTopBar';
 import { HotkeysModal } from '../components/HotkeysModal';
 import { SessionSummaryDialog } from '../components/SessionSummaryDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { SessionData } from '../types/session';
@@ -205,27 +213,30 @@ export const SessionPage: React.FC = () => {
     setInputMode((prev) => (prev === 'touch' ? 'dpad' : 'touch'));
   }, []);
 
-  const handleEndSessionClick = useCallback(() => {
-    // Peak-End Rule: Show summary celebration dialog before tearing down
-    setShowSummaryDialog(true);
-  }, []);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [isTerminated, setIsTerminated] = useState(false);
 
-  const handleConfirmDisconnect = async () => {
-    setShowSummaryDialog(false);
-    if (!sessionId) {
-      navigate('/');
+  const handleEndSessionClick = useCallback(() => {
+    if (isTerminated) {
+      setShowSummaryDialog(true);
       return;
     }
+    setShowEndConfirm(true);
+  }, [isTerminated]);
 
-    try {
-      await fetch(`/api/sessions/${sessionId}`, {
-        method: 'DELETE',
-      });
-    } catch (err) {
-      console.error('Failed to terminate session on server:', err);
-    } finally {
-      navigate('/');
+  const handleConfirmEndSession = async () => {
+    setShowEndConfirm(false);
+    setIsTerminated(true);
+    if (sessionId) {
+      try {
+        await fetch(`/api/sessions/${sessionId}/stop`, {
+          method: 'POST',
+        });
+      } catch (err) {
+        console.error('Failed to terminate session on server:', err);
+      }
     }
+    setShowSummaryDialog(true);
   };
 
   if (isLoading) {
@@ -309,11 +320,30 @@ export const SessionPage: React.FC = () => {
       {/* Desktop Keyboard Shortcuts Cheatsheet Modal */}
       <HotkeysModal isOpen={showHotkeys} onClose={() => setShowHotkeys(false)} />
 
-      {/* Peak-End Rule Session Summary & Recording Download Dialog */}
+      {/* Session Termination Confirmation Dialog */}
+      <Dialog open={showEndConfirm} onOpenChange={setShowEndConfirm}>
+        <DialogContent className="max-w-sm bg-surface-1 border-hairline text-ink">
+          <DialogHeader>
+            <DialogTitle>End Android Session?</DialogTitle>
+            <DialogDescription>
+              Disconnecting will stop the container sandbox, release ADB resources, and finalize your fMP4 recording for safe replay and download.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button variant="secondary" onClick={() => setShowEndConfirm(false)} className="rounded-pill">
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmEndSession} className="rounded-pill">
+              End Session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Peak-End Rule Session Summary & Recording Download Dialog (Active only post-termination) */}
       <SessionSummaryDialog
         isOpen={showSummaryDialog}
-        onClose={() => setShowSummaryDialog(false)}
-        onConfirmDisconnect={handleConfirmDisconnect}
+        onClose={() => navigate('/')}
         stats={stats}
         sessionDurationSec={sessionDurationSec}
         sessionId={session.id}

@@ -5,6 +5,7 @@
 # ==============================================================================
 
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
 echo "=========================================================="
 echo " Starting DroidCanvas Cloud VM Provisioning Setup         "
@@ -12,7 +13,7 @@ echo "=========================================================="
 
 # 1. Update OS and install base dependencies
 echo "[1/7] Installing base system dependencies and tools..."
-sudo apt-get update -y
+sudo -E apt-get update -y
 sudo apt-get install -y \
     curl \
     wget \

@@ -70,6 +70,8 @@ type SessionUsecase interface {
 	GetSession(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context) ([]*Session, error)
 	DestroySession(ctx context.Context, id string) error
+	DeleteSession(ctx context.Context, id string) error
+	ClearSessionHistory(ctx context.Context) error
 	CleanupStaleSessions(ctx context.Context, idleThreshold time.Duration) error
 }
 

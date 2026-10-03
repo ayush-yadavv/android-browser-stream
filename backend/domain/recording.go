@@ -4,7 +4,7 @@ import "context"
 
 // SessionRecorder defines the contract for persisting video packet streams to storage.
 type SessionRecorder interface {
-	WritePacket(data []byte)
+	WritePacket(pkt *VideoPacket)
 	Close() error
 }
 

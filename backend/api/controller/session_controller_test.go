@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func (m *MockContainerRepo) IsRunning(ctx context.Context, containerID string) (
 	return true, nil
 }
 
-func setupTestRouter(t *testing.T, maxSessions int) (*gin.Engine, domain.SessionUsecase) {
+func setupTestRouter(t *testing.T, maxSessions int) (*gin.Engine, domain.SessionUsecase, *repository.SQLiteSessionRepository) {
 	gin.SetMode(gin.TestMode)
 
 	db, err := sql.Open("sqlite", ":memory:")
@@ -63,7 +64,9 @@ func setupTestRouter(t *testing.T, maxSessions int) (*gin.Engine, domain.Session
 	{
 		api.POST("", ctrl.Create)
 		api.GET("", ctrl.List)
+		api.DELETE("", ctrl.ClearHistory)
 		api.GET("/:id", ctrl.Get)
+		api.POST("/:id/stop", ctrl.Stop)
 		api.DELETE("/:id", ctrl.Delete)
 		api.GET("/:id/recording", ctrl.GetRecording)
 	}
@@ -72,11 +75,11 @@ func setupTestRouter(t *testing.T, maxSessions int) (*gin.Engine, domain.Session
 		_ = db.Close()
 	})
 
-	return r, uc
+	return r, uc, sessionRepo
 }
 
 func TestSessionController_CreateAndGet(t *testing.T) {
-	router, _ := setupTestRouter(t, 3)
+	router, _, _ := setupTestRouter(t, 3)
 
 	// 1. POST /api/sessions -> 201 Created
 	w := httptest.NewRecorder()
@@ -84,7 +87,6 @@ func TestSessionController_CreateAndGet(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
-
 	var session domain.Session
 	err := json.Unmarshal(w.Body.Bytes(), &session)
 	require.NoError(t, err)
@@ -114,14 +116,13 @@ func TestSessionController_CreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, list, 1)
 
-	// 4. DELETE /api/sessions/:id -> 204 No Content
+	// 4. POST /api/sessions/:id/stop -> 204 No Content
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(http.MethodDelete, "/api/sessions/"+session.ID, nil)
+	req, _ = http.NewRequest(http.MethodPost, "/api/sessions/"+session.ID+"/stop", nil)
 	router.ServeHTTP(w, req)
-
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
-	// 5. GET after delete -> 200 with status=terminated
+	// 5. GET after stop -> 200 with status=terminated
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(http.MethodGet, "/api/sessions/"+session.ID, nil)
 	router.ServeHTTP(w, req)
@@ -130,10 +131,22 @@ func TestSessionController_CreateAndGet(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &fetched)
 	require.NoError(t, err)
 	assert.Equal(t, domain.SessionStatusTerminated, fetched.Status)
+
+	// 6. DELETE /api/sessions/:id -> 204 No Content
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodDelete, "/api/sessions/"+session.ID, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	// 7. GET after delete -> 404 Not Found
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, "/api/sessions/"+session.ID, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestSessionController_GetNotFound(t *testing.T) {
-	router, _ := setupTestRouter(t, 3)
+	router, _, _ := setupTestRouter(t, 3)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/sessions/nonexistent-id", nil)
@@ -147,7 +160,7 @@ func TestSessionController_GetNotFound(t *testing.T) {
 }
 
 func TestSessionController_LimitExceeded(t *testing.T) {
-	router, _ := setupTestRouter(t, 1)
+	router, _, _ := setupTestRouter(t, 1)
 
 	// 1st creates fine
 	w := httptest.NewRecorder()
@@ -163,7 +176,7 @@ func TestSessionController_LimitExceeded(t *testing.T) {
 }
 
 func TestSessionController_CreateWithKioskAndRecording(t *testing.T) {
-	router, _ := setupTestRouter(t, 3)
+	router, _, _ := setupTestRouter(t, 3)
 
 	payload := []byte(`{"kiosk_mode": true, "record_session": true}`)
 	w := httptest.NewRecorder()
@@ -182,7 +195,7 @@ func TestSessionController_CreateWithKioskAndRecording(t *testing.T) {
 }
 
 func TestSessionController_GetRecording(t *testing.T) {
-	router, uc := setupTestRouter(t, 3)
+	router, uc, repo := setupTestRouter(t, 3)
 
 	// Create session with recording
 	session, err := uc.CreateSession(context.Background(), domain.CreateSessionOptions{
@@ -190,29 +203,97 @@ func TestSessionController_GetRecording(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 1. When recording path is empty -> 404
+	// 1. While session is active (ready) -> 409 Conflict
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/sessions/"+session.ID+"/recording", nil)
 	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusConflict, w.Code)
+
+	// 2. Terminate session
+	err = uc.DestroySession(context.Background(), session.ID)
+	require.NoError(t, err)
+
+	// 3. When recording path is empty -> 404
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, "/api/sessions/"+session.ID+"/recording", nil)
+	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	// 2. When recording path points to real file on disk -> 200 OK
+	// 4. When recording path points to a real file on disk and session is terminated -> 200 OK
 	tmpFile, err := os.CreateTemp("", "recording-*.mp4")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 	_, _ = tmpFile.WriteString("fake-mp4-data")
 	tmpFile.Close()
 
-	// Update session recording path
-	db, err := sql.Open("sqlite", ":memory:")
+	err = repo.UpdateRecordingPath(context.Background(), session.ID, tmpFile.Name())
 	require.NoError(t, err)
-	defer db.Close()
 
-	// Update in the usecase's session repo by setting recording_path
-	// Let's create another session with a valid path
-	// Directly test 404 for unknown session
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, "/api/sessions/"+session.ID+"/recording", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "fake-mp4-data", w.Body.String())
+
+	// 5. Directly test 404 for unknown session
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(http.MethodGet, "/api/sessions/unknown-id/recording", nil)
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestSessionController_ClearHistory(t *testing.T) {
+	router, uc, _ := setupTestRouter(t, 3)
+
+	s1, err := uc.CreateSession(context.Background())
+	require.NoError(t, err)
+	s2, err := uc.CreateSession(context.Background())
+	require.NoError(t, err)
+
+	// Stop both sessions
+	_ = uc.DestroySession(context.Background(), s1.ID)
+	_ = uc.DestroySession(context.Background(), s2.ID)
+
+	// Clear history -> 200 OK
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/sessions", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify all terminated sessions are removed
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, "/api/sessions", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var list []*domain.Session
+	err = json.Unmarshal(w.Body.Bytes(), &list)
+	require.NoError(t, err)
+	assert.Empty(t, list)
+}
+
+func TestSessionController_CreateSession_DefaultRecording(t *testing.T) {
+	router, _, _ := setupTestRouter(t, 3)
+
+	// When payload does NOT specify record_session, it defaults to true
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/sessions", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	var session domain.Session
+	err := json.Unmarshal(w.Body.Bytes(), &session)
+	require.NoError(t, err)
+	assert.True(t, session.Recording, "record_session should default to true when omitted")
+
+	// When explicitly false, it is false
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, "/api/sessions", strings.NewReader(`{"record_session": false}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	err = json.Unmarshal(w.Body.Bytes(), &session)
+	require.NoError(t, err)
+	assert.False(t, session.Recording, "record_session should be false when explicitly disabled")
 }

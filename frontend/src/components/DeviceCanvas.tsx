@@ -337,11 +337,11 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
 
           {/* DOCKED VIRTUAL NAVIGATION DOCK & TEXT INPUT (Fitts's Law >=44px) */}
           {hasFirstFrame && (
-            <div className="w-full max-w-[430px] space-y-2 select-none">
+            <div className="w-full max-w-[430px] space-y-2 select-none px-1 sm:px-0">
               {!kioskEnabled ? (
-                <div className="flex items-center justify-between px-3 sm:px-4 py-1.5 rounded-2xl bg-surface-1 border border-hairline shadow-lg">
+                <div className="flex items-center justify-between px-2 sm:px-4 py-1.5 rounded-2xl bg-surface-1 border border-hairline shadow-lg max-w-full">
                   {/* Unified Master Audio Controller (Web & Android Synced) */}
-                  <div className="flex items-center bg-surface-2/80 border border-hairline rounded-xl px-1 sm:px-1.5 py-0.5 gap-0.5 sm:gap-1 shadow-sm">
+                  <div className="flex items-center bg-surface-2/80 border border-hairline rounded-xl px-1 sm:px-1.5 py-0.5 gap-0.5 sm:gap-1 shadow-sm shrink-0">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
@@ -350,12 +350,12 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                             onToggleMute?.();
                           }}
                           aria-label={isMuted ? 'Unmute Audio (M)' : 'Mute Audio (M)'}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-3 transition-colors cursor-pointer active:scale-95 text-ink-muted hover:text-ink"
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center hover:bg-surface-3 transition-colors cursor-pointer active:scale-95 text-ink-muted hover:text-ink"
                         >
                           {isMuted ? (
-                            <VolumeX className="w-4 h-4 text-amber-400" />
+                            <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
                           ) : (
-                            <Volume2 className="w-4 h-4 text-accent-blue" />
+                            <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-accent-blue" />
                           )}
                         </button>
                       </TooltipTrigger>
@@ -371,15 +371,15 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                             onVolumeChange?.(Math.max(0, Math.round((current - 0.08) * 100) / 100));
                           }}
                           aria-label="Volume Down"
-                          className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors cursor-pointer active:scale-95"
+                          className="hidden xs:flex w-6 h-6 sm:w-7 sm:h-7 rounded-lg items-center justify-center hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors cursor-pointer active:scale-95"
                         >
-                          <Minus className="w-3.5 h-3.5" />
+                          <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Volume Down (Website & App)</TooltipContent>
                     </Tooltip>
 
-                    <span className="font-mono text-[11px] font-semibold text-ink w-7 sm:w-8 text-center select-none">
+                    <span className="font-mono text-[10px] sm:text-[11px] font-semibold text-ink w-6 sm:w-8 text-center select-none">
                       {Math.round((isMuted ? 0 : (volume ?? 1)) * 100)}%
                     </span>
 
@@ -392,27 +392,27 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                             onVolumeChange?.(Math.min(1, Math.round((current + 0.08) * 100) / 100));
                           }}
                           aria-label="Volume Up"
-                          className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors cursor-pointer active:scale-95"
+                          className="hidden xs:flex w-6 h-6 sm:w-7 sm:h-7 rounded-lg items-center justify-center hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors cursor-pointer active:scale-95"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Volume Up (Website & App)</TooltipContent>
                     </Tooltip>
                   </div>
 
-                  <div className="h-5 w-px bg-hairline" />
+                  <div className="h-5 w-px bg-hairline shrink-0" />
 
                   {/* Primary Navigation (Back, Home, Recents) */}
-                  <div className="flex items-center space-x-2 sm:space-x-4">
+                  <div className="flex items-center space-x-1 sm:space-x-4">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
                           onClick={sendBack}
                           aria-label="Back"
-                          className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-surface-2 text-ink hover:text-white transition-colors cursor-pointer active:scale-95"
+                          className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:bg-surface-2 text-ink hover:text-white transition-colors cursor-pointer active:scale-95"
                         >
-                          <ChevronLeft className="w-5 h-5" />
+                          <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Back (Esc / Right-Click)</TooltipContent>
@@ -423,9 +423,9 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                         <button
                           onClick={sendHome}
                           aria-label="Home"
-                          className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-surface-2 text-ink hover:text-white transition-colors cursor-pointer active:scale-95"
+                          className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:bg-surface-2 text-ink hover:text-white transition-colors cursor-pointer active:scale-95"
                         >
-                          <Circle className="w-4 h-4" />
+                          <Circle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Home (Middle-Click)</TooltipContent>
@@ -436,16 +436,16 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                         <button
                           onClick={sendAppSwitch}
                           aria-label="Recent Apps"
-                          className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-surface-2 text-ink hover:text-white transition-colors cursor-pointer active:scale-95"
+                          className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:bg-surface-2 text-ink hover:text-white transition-colors cursor-pointer active:scale-95"
                         >
-                          <Square className="w-4 h-4" />
+                          <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Recent Apps (Alt+Tab)</TooltipContent>
                     </Tooltip>
                   </div>
 
-                  <div className="h-5 w-px bg-hairline" />
+                  <div className="h-5 w-px bg-hairline shrink-0" />
 
                   {/* System Power & Wake */}
                   <div className="flex items-center">
@@ -454,9 +454,9 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                         <button
                           onClick={sendPower}
                           aria-label="Power"
-                          className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-surface-2 text-ink-muted hover:text-rose-400 transition-colors cursor-pointer active:scale-95"
+                          className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:bg-surface-2 text-ink-muted hover:text-rose-400 transition-colors cursor-pointer active:scale-95"
                         >
-                          <Power className="w-4 h-4" />
+                          <Power className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Power / Screen Wake</TooltipContent>
@@ -465,10 +465,10 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                 </div>
               ) : (
                 /* Kiosk Mode Status Bar Banner */
-                <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs shadow-sm">
-                  <span className="font-semibold">🔒 Kiosk Lockdown Active</span>
-                  <span className="text-[11px] text-amber-200/80">
-                    Locked to {targetPackage.includes('deskclock') ? 'Clock' : targetPackage}
+                <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs shadow-sm max-w-full">
+                  <span className="font-semibold shrink-0">🔒 Kiosk Active</span>
+                  <span className="text-[11px] text-amber-200/80 truncate ml-2">
+                    {targetPackage.includes('deskclock') ? 'DeskClock' : targetPackage}
                   </span>
                 </div>
               )}
@@ -476,14 +476,14 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
               {/* Text Injection & Host Clipboard Bar */}
               <form
                 onSubmit={handleTextSubmit}
-                className="flex items-center space-x-2 px-3 py-1.5 rounded-2xl bg-surface-1 border border-hairline shadow-sm"
+                className="flex items-center space-x-2 px-3 py-1.5 rounded-2xl bg-surface-1 border border-hairline shadow-sm max-w-full"
               >
                 <Input
                   type="text"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder="Type or paste text into Android..."
-                  className="flex-1 bg-transparent border-none text-xs focus-visible:ring-0 focus-visible:ring-offset-0 px-1 text-ink placeholder:text-ink-muted h-8"
+                  className="flex-1 bg-transparent border-none text-xs focus-visible:ring-0 focus-visible:ring-offset-0 px-1 text-ink placeholder:text-ink-muted h-8 min-w-0"
                 />
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -492,7 +492,7 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                       variant="ghost"
                       size="sm"
                       onClick={handlePasteClipboard}
-                      className="h-8 px-2.5 text-xs text-ink-muted hover:text-ink gap-1 rounded-lg cursor-pointer shrink-0"
+                      className="h-8 px-2 sm:px-2.5 text-xs text-ink-muted hover:text-ink gap-1 rounded-lg cursor-pointer shrink-0"
                     >
                       <Clipboard className="w-3.5 h-3.5 text-accent-blue" />
                       <span className="hidden sm:inline">Paste</span>
@@ -505,7 +505,7 @@ export const DeviceCanvas: React.FC<DeviceCanvasProps> = ({
                   variant="secondary"
                   size="sm"
                   disabled={!inputText.trim()}
-                  className="h-8 px-3 text-xs rounded-lg cursor-pointer shrink-0"
+                  className="h-8 px-2.5 sm:px-3 text-xs rounded-lg cursor-pointer shrink-0"
                 >
                   <Send className="w-3.5 h-3.5" />
                 </Button>

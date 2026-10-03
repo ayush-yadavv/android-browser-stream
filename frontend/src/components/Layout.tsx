@@ -42,21 +42,21 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-canvas text-ink flex flex-col font-body selection:bg-accent-blue selection:text-white">
+    <div className="min-h-screen bg-canvas text-ink flex flex-col font-body selection:bg-accent-blue selection:text-white w-full max-w-full overflow-x-hidden">
       {/* 56px sticky top bar on bg-canvas per DESIGN.md */}
-      <header className="sticky top-0 z-50 h-14 bg-canvas/90 backdrop-blur-md border-b border-hairline px-4 sm:px-6 flex items-center justify-between">
+      <header className="sticky top-0 z-50 h-14 bg-canvas/90 backdrop-blur-md border-b border-hairline px-3 sm:px-6 flex items-center justify-between max-w-full overflow-hidden">
         {/* Brand / Logo */}
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-lg bg-surface-1 border border-hairline flex items-center justify-center text-accent-blue shadow-sm">
+        <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-surface-1 border border-hairline flex items-center justify-center text-accent-blue shadow-sm shrink-0">
             <Smartphone className="w-4 h-4" />
           </div>
-          <Link to="/" className="font-semibold tracking-tight text-ink text-sm sm:text-base hover:opacity-90 transition-opacity">
-            DroidCanvas <span className="text-ink-muted font-normal text-xs sm:text-sm">· Cloud Android Engine</span>
+          <Link to="/" className="font-semibold tracking-tight text-ink text-sm sm:text-base hover:opacity-90 transition-opacity truncate">
+            DroidCanvas <span className="text-ink-muted font-normal text-xs sm:text-sm hidden sm:inline">· Cloud Android Engine</span>
           </Link>
         </div>
 
         {/* Desktop Controls (≥810px) */}
-        <div className="hidden min-[810px]:flex items-center space-x-3 text-xs">
+        <div className="hidden min-[810px]:flex items-center space-x-3 text-xs shrink-0">
           {/* Health Status Indicator */}
           <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-surface-1 border border-hairline">
             <span
@@ -98,8 +98,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
 
         {/* Mobile Hamburger Button (<810px per DESIGN.md) */}
-        <div className="flex min-[810px]:hidden items-center space-x-2">
-          <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-surface-1 border border-hairline text-[11px]">
+        <div className="flex min-[810px]:hidden items-center space-x-2 shrink-0">
+          <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-surface-1 border border-hairline text-[11px] shrink-0">
             <span
               className={`w-1.5 h-1.5 rounded-full ${
                 health?.status === 'healthy' ? 'bg-semantic-success' : 'bg-amber-400'
@@ -147,15 +147,15 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
         {children}
       </main>
 
       {/* Footer per DESIGN.md */}
-      <footer className="border-t border-hairline bg-canvas py-8 px-6 text-center text-xs text-ink-muted">
+      <footer className="border-t border-hairline bg-canvas py-6 sm:py-8 px-4 sm:px-6 text-center text-xs text-ink-muted w-full overflow-hidden">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© 2026 DroidCanvas · Ephemeral Cloud-Native Android Streaming Engine</p>
-          <div className="flex items-center space-x-4">
+          <p className="text-center sm:text-left">© 2026 DroidCanvas · Ephemeral Cloud-Native Android Streaming Engine</p>
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
             <span className="inline-flex items-center gap-1 text-ink-muted">
               <ShieldCheck className="w-3.5 h-3.5 text-accent-blue" /> Ephemeral Redroid Sandbox
             </span>

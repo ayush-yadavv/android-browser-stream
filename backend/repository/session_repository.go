@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/user/android-browser-stream/backend/domain"
@@ -142,7 +143,7 @@ func (r *SQLiteSessionRepository) List(ctx context.Context) ([]*domain.Session, 
 	SELECT id, container_id, adb_port, status, device_width, device_height,
 		kiosk_enabled, target_package, target_activity, recording, recording_path,
 		created_at, last_active_at
-	FROM sessions ORDER BY created_at DESC
+	FROM sessions ORDER BY datetime(created_at) DESC, created_at DESC
 	`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -182,7 +183,15 @@ func (r *SQLiteSessionRepository) List(ctx context.Context) ([]*domain.Session, 
 		sessions = append(sessions, &s)
 	}
 
-	return sessions, rows.Err()
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	sort.SliceStable(sessions, func(i, j int) bool {
+		return sessions[i].CreatedAt.After(sessions[j].CreatedAt)
+	})
+
+	return sessions, nil
 }
 
 func (r *SQLiteSessionRepository) UpdateStatus(ctx context.Context, id string, status domain.SessionStatus) error {

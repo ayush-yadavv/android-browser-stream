@@ -121,15 +121,23 @@ func TestRelayVideoAndControl_Pipes(t *testing.T) {
 
 type mockRecorder struct {
 	mu      sync.Mutex
-	packets [][]byte
+	packets []*domain.VideoPacket
 }
 
-func (m *mockRecorder) WritePacket(data []byte) {
+func (m *mockRecorder) WritePacket(pkt *domain.VideoPacket) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	cp := make([]byte, len(data))
-	copy(cp, data)
-	m.packets = append(m.packets, cp)
+	if pkt == nil {
+		return
+	}
+	cp := make([]byte, len(pkt.Data))
+	copy(cp, pkt.Data)
+	m.packets = append(m.packets, &domain.VideoPacket{
+		PTS:        pkt.PTS,
+		IsConfig:   pkt.IsConfig,
+		IsKeyFrame: pkt.IsKeyFrame,
+		Data:       cp,
+	})
 }
 
 func (m *mockRecorder) Close() error {
@@ -184,7 +192,9 @@ func TestRelay_KioskFilterAndRecorder(t *testing.T) {
 
 	rec.mu.Lock()
 	require.NotEmpty(t, rec.packets)
-	assert.Equal(t, nalData, rec.packets[0])
+	assert.Equal(t, nalData, rec.packets[0].Data)
+	assert.Equal(t, int64(1000), rec.packets[0].PTS)
+	assert.True(t, rec.packets[0].IsKeyFrame)
 	rec.mu.Unlock()
 
 	// 2. Send blocked KEYCODE_HOME (3) over ChannelControl (0x02)

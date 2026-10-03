@@ -292,8 +292,8 @@ func TestIntegration_ConcurrencyLimitAndReclamation(t *testing.T) {
 	defer resp3.Body.Close()
 	assert.Equal(t, http.StatusTooManyRequests, resp3.StatusCode)
 
-	// 4. Terminate Session 1
-	req, _ := http.NewRequest(http.MethodDelete, harness.ServerURL+"/api/sessions/"+s1.ID, nil)
+	// 4. Terminate Session 1 via /stop
+	req, _ := http.NewRequest(http.MethodPost, harness.ServerURL+"/api/sessions/"+s1.ID+"/stop", nil)
 	delResp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer delResp.Body.Close()
@@ -309,10 +309,21 @@ func TestIntegration_ConcurrencyLimitAndReclamation(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp4.Body).Decode(&s3))
 	assert.NotEmpty(t, s3.ID)
 
-	// Verify all sessions in DB
+	// Verify all sessions in DB (s1 terminated, s2 active, s3 active)
 	list, err := harness.DB.List(ctx)
 	require.NoError(t, err)
 	assert.Len(t, list, 3)
+
+	// 6. Delete Session 1 permanently
+	reqDel, _ := http.NewRequest(http.MethodDelete, harness.ServerURL+"/api/sessions/"+s1.ID, nil)
+	delResp2, err := http.DefaultClient.Do(reqDel)
+	require.NoError(t, err)
+	defer delResp2.Body.Close()
+	assert.Equal(t, http.StatusNoContent, delResp2.StatusCode)
+
+	listAfterDel, err := harness.DB.List(ctx)
+	require.NoError(t, err)
+	assert.Len(t, listAfterDel, 2)
 }
 
 func TestIntegration_CORSOriginReflection(t *testing.T) {

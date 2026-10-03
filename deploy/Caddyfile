@@ -1,8 +1,6 @@
 # Caddy configuration for Real-Time Android Browser Streaming
-# Replace {$DOMAIN:localhost} with your actual domain (e.g., droidcanvas.yourdomain.com)
-
-{$DOMAIN:localhost} {
-    # Serve built React frontend assets
+# HTTPS only with automatic TLS and strict HSTS
+{$DOMAIN:droidcanvas.ay7.me} {
     root * /srv/frontend/dist
     file_server
 
@@ -22,11 +20,12 @@
         try_files {path} /index.html
     }
 
-    # Security headers
+    # Strict HTTPS Security Headers
     header {
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     }
 
     # Enable gzip / zstd compression for static assets
