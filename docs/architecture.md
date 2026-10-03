@@ -209,7 +209,7 @@ Glass-to-glass (action-to-render) latency measures the complete duration elapsed
 
 To fulfill **Core Requirement 3 (CR-3)** with senior systems engineering precision, the complete glass-to-glass delay ($L_{\text{total}}$) is deconstructed into an **8-stage discrete pipeline**:
 
-$$L_{\text{total}} = T_{\text{capture}} + T_{\text{ws\_up}} + T_{\text{relay\_in}} + T_{\text{os\_dispatch}} + T_{\text{render\_encode}} + T_{\text{ws\_down}} + T_{\text{decode}} + T_{\text{paint}}$$
+$$L_{\text{total}} = T_{\text{capture}} + T_{\text{ws-up}} + T_{\text{relay-in}} + T_{\text{os-dispatch}} + T_{\text{render-encode}} + T_{\text{ws-down}} + T_{\text{decode}} + T_{\text{paint}}$$
 
 ```mermaid
 sequenceDiagram
@@ -277,7 +277,7 @@ To ensure scientific rigor and empirical validation, three independent measureme
   2. Runs a synchronized millisecond clock on Android OS ($t_{\text{android}}$) via terminal loop (`while true; do date +%H:%M:%S.%3N; sleep 0.01; done`) or lightweight clock app.
   3. A high-speed camera or single synchronized screen capture photographs both displays simultaneously.
   4. The glass-to-glass delay is quantified as:
-     $$\Delta t = t_{\text{client\_render}} - t_{\text{android\_clock}}$$
+     $$\Delta t = t_{\text{client-render}} - t_{\text{android-clock}}$$
 
 ---
 

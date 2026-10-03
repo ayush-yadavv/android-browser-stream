@@ -77,7 +77,7 @@ Empirical latency benchmarks measured across local loopback and Cloud VM environ
 1. Launch session with `scripts/run_latency_benchmark.sh`. The script triggers AOSP DeskClock's millisecond stopwatch on the Android container.
 2. The browser renders the live stream on HTML5 Canvas alongside the floating millisecond client counter (`Ctrl+Shift+L`).
 3. A 240 FPS camera photographs both the physical host monitor and the device container in a single frame.
-4. Glass-to-glass delay is calculated as $\Delta t = t_{\text{client\_canvas}} - t_{\text{android\_clock}}$.
+4. Glass-to-glass delay is calculated as $\Delta t = t_{\text{client-canvas}} - t_{\text{android-clock}}$.
 
 ---
 

@@ -1668,3 +1668,23 @@
   - None.
 - **User Decision / Next Step:**
   - Present implementation to user.
+
+### Entry 68
+- **Timestamp:** 2026-10-03T17:56:45+05:30
+- **User Prompt (Verbatim):**
+  ```
+  '_' allowed only in math mode
+  ```
+- **Response & Actions Taken (Fixed LaTeX Underscore in Text Mode Error):**
+  1. Identified root cause: LaTeX / MathJax / KaTeX parsers treat `\text{...}` as text mode. Inside `\text{...}`, unescaped or markdown-unescaped underscores `_` trigger the standard LaTeX error: `! LaTeX Error: '_' allowed only in math mode.`
+  2. Located all instances across documentation:
+     - [`docs/architecture.md`](docs/architecture.md#L212): `T_{\text{ws\_up}}`, `T_{\text{relay\_in}}`, `T_{\text{os\_dispatch}}`, `T_{\text{render\_encode}}`, `T_{\text{ws\_down}}`.
+     - [`docs/architecture.md`](docs/architecture.md#L280): `t_{\text{client\_render}}`, `t_{\text{android\_clock}}`.
+     - [`README.md`](README.md#L80): `t_{\text{client\_canvas}}`, `t_{\text{android\_clock}}`.
+  3. Replaced underscores inside `\text{}` with standard hyphens (e.g. `T_{\text{ws-up}}`, `t_{\text{client-render}} - t_{\text{android-clock}}`, `t_{\text{client-canvas}} - t_{\text{android-clock}}`).
+  4. Verified zero occurrences of `\text{..._...}` remain across the repository (`git grep '\\text{[^}]*_[^}]*}'`).
+  5. Verified all 64 Vitest tests passing (`npm test`).
+- **Errors / Failures Encountered:**
+  - None.
+- **User Decision / Next Step:**
+  - Resolved LaTeX math mode syntax error.
