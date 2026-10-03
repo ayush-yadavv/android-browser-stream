@@ -176,3 +176,78 @@ Occasionally, when dynamic codec profile extraction (`extractCodecProfile`) dete
 
 ### Solution:
 Introduced `reconfiguringRef: Promise<void> | null` tracking in `useVideoDecoder.ts`. Incoming keyframe chunks await `reconfiguringRef` prior to invoking `decoder.decode()`, guaranteeing sequential pipeline ordering.
+
+---
+
+## 8. Async Microtask Decoder Configuration Race & Dropped IDR Keyframe
+
+### Severity: Critical (Score: 92)
+### Symptoms:
+The streaming pipeline connected, negotiated scrcpy sockets, and began relaying video. The browser console logged `Detected stream codec profile: avc1.42801f, reconfiguring decoder`. However, no video ever appeared on the canvas (`stats.fps` remained 0), `hasFirstFrame` never became `true`, and user interaction stayed disabled.
+
+### Root Cause Analysis:
+1. `scrcpy-server` transmits a standalone SPS/PPS configuration packet (`isConfig: true`) followed immediately (~5ms) by the first IDR Keyframe slice (`isKey: true`).
+2. Upon receiving the SPS/PPS packet, `feedPacket` invoked `configureDecoder()`.
+3. Because `configureDecoder` was originally declared as an `async` function (evaluating `await VideoDecoder.isConfigSupported(...)`), JavaScript deferred execution of the configuration logic to an asynchronous microtask.
+4. Consequently, `configuredRef.current` remained `false` on the synchronous call stack.
+5. In the microsecond window before the microtask resumed, the subsequent IDR Keyframe arrived. `feedPacket` checked:
+   ```typescript
+   if (!configuredRef.current || decoderRef.current?.state !== 'configured') return;
+   ```
+   and silently **dropped the IDR Keyframe**.
+6. When `configureDecoder` finally executed in the microtask, it set `waitingForKey.current = true`. Because the only initial IDR Keyframe had already been dropped, all subsequent delta frames were discarded waiting for a keyframe that never arrived!
+
+### Solution:
+Rewrote decoder configuration into a strictly synchronous operation (`configureDecoderSync`):
+```typescript
+const configureDecoderSync = useCallback((codec: string) => {
+  if (!decoderRef.current || decoderRef.current.state === 'closed') return false;
+  try {
+    decoderRef.current.configure({
+      codec,
+      optimizeForLatency: true,
+      hardwareAcceleration: 'prefer-hardware',
+    });
+    currentCodecRef.current = codec;
+    configuredRef.current = true;
+    return true;
+  } catch (_) {
+    // Synchronous fallback without hardware acceleration
+    decoderRef.current.configure({ codec, optimizeForLatency: true });
+    currentCodecRef.current = codec;
+    configuredRef.current = true;
+    return true;
+  }
+}, []);
+```
+By removing async microtasks, the decoder is synchronously in `'configured'` state on the exact same tick, ensuring the subsequent IDR keyframe is decoded and rendered immediately.
+
+---
+
+## 9. Passive Event Listener Warning & Scrcpy Fixed-Point `i16fp` 2048 Scroll Encoding
+
+### Severity: Medium (Score: 80)
+### Symptoms:
+1. Spinning the mouse wheel on the canvas caused browser console spam:
+   `[Violation] Added non-passive event listener to a scroll-blocking 'wheel' event` and `Unable to preventDefault inside passive event listener invocation`.
+2. The Android view refused to scroll, regardless of mouse wheel movement.
+
+### Root Cause Analysis:
+Two distinct issues interacted:
+1. **Passive Event Listener Violation**: Modern browsers treat JSX `onWheel` handlers as `passive: true` by default to preserve smooth scrolling of the host webpage. Invoking `e.preventDefault()` inside a passive listener throws browser warnings and fails to cancel host scrolling.
+2. **Scrcpy Fixed-Point `i16fp` Multiplier**: In scrcpy protocol v2.0+, `hscroll` and `vscroll` in `INJECT_SCROLL_EVENT` (bytes 13–16) are **16-bit signed fixed-point numbers** where 1.0 scroll unit = **2048 (`0x0800`)**. Sending unscaled raw integers (e.g. `-1` or `+1`) caused scrcpy server to divide by 2048, yielding `-0.000488` scroll units. Android's `InputManager` rounded this sub-pixel float to 0 pixels scroll distance!
+
+### Solution:
+1. **Imperative Non-Passive Registration**:
+   In `useInputCapture.ts`, attached an imperative non-passive listener directly to the canvas ref:
+   ```typescript
+   canvas.addEventListener('wheel', onWheel, { passive: false });
+   ```
+   Guarded `e.preventDefault()` with `if (e.cancelable) e.preventDefault()`.
+2. **Fixed-Point Scaling**:
+   Scaled raw scroll float deltas by `2048`:
+   ```typescript
+   const vscroll = Math.max(-32768, Math.min(32767, Math.round(vFloat * 2048)));
+   ```
+   Spinning the mouse wheel now dispatches valid `±2048` fixed-point scroll packets, achieving smooth, native Android list scrolling.
+

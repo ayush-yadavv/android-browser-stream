@@ -1,14 +1,19 @@
 package scrcpy
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
+	"github.com/user/android-browser-stream/backend/domain"
 	"github.com/user/android-browser-stream/backend/infrastructure/adb"
 )
 
@@ -21,14 +26,26 @@ const (
 	SocketAbstractName = "scrcpy"
 )
 
-// Server coordinates the scrcpy-server process and dual TCP sockets.
+// Thread-safe cache of codecs that failed on specific device serials (e.g. "127.0.0.1:5555:av1" -> true)
+var deviceUnsupportedCodecs sync.Map
+
+type readCloser struct {
+	io.Reader
+	io.Closer
+}
+
+// Server coordinates the scrcpy-server process and TCP sockets (video, audio, control).
 type Server struct {
 	adb         *adb.Client
 	serial      string
 	videoPort   int
 	cmd         *exec.Cmd
 	videoConn   net.Conn
+	videoReader io.Reader
+	audioConn   net.Conn
 	controlConn net.Conn
+	codec       domain.VideoCodec
+	audio       bool
 }
 
 // NewServer constructs an scrcpy Server manager for the targeted device.
@@ -36,12 +53,45 @@ func NewServer(adbClient *adb.Client, serial string) *Server {
 	return &Server{
 		adb:    adbClient,
 		serial: serial,
+		codec:  domain.CodecH264,
+		audio:  true,
 	}
 }
 
+// Codec returns the active video codec of the scrcpy server.
+func (s *Server) Codec() domain.VideoCodec {
+	return s.codec
+}
+
+// SetCodec configures the video codec for scrcpy-server.
+func (s *Server) SetCodec(codec domain.VideoCodec) {
+	if codec != "" {
+		s.codec = codec
+	}
+}
+
+// AudioEnabled reports whether device audio streaming is enabled.
+func (s *Server) AudioEnabled() bool {
+	return s.audio
+}
+
+// SetAudio configures whether audio streaming is enabled for scrcpy-server.
+func (s *Server) SetAudio(enabled bool) {
+	s.audio = enabled
+}
+
+// AudioConn returns the dedicated audio stream connection, or nil if audio is disabled.
+func (s *Server) AudioConn() io.Reader {
+	return s.audioConn
+}
+
 // Start pushes the server binary, launches the server process, and establishes video & control sockets.
-func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort int) error {
+// Automatically falls back to CodecH264 if the device lacks hardware/software encoder for the requested modern codec.
+func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort int, codecOpt ...domain.VideoCodec) error {
 	s.videoPort = videoPort
+	if len(codecOpt) > 0 && codecOpt[0] != "" {
+		s.codec = codecOpt[0]
+	}
 
 	// 1. Push scrcpy-server binary to Android /data/local/tmp if path provided
 	if localBinaryPath != "" {
@@ -55,17 +105,68 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 		return fmt.Errorf("adb forward port %d: %w", videoPort, err)
 	}
 
-	// 3. Launch scrcpy-server on Android userspace
-	// tunnel_forward=true allows the host to connect via adb forward
-	cmd := s.adb.Shell(ctx, s.serial,
+	// 3. Check if target device is already known to lack support for requested codec
+	if s.codec != domain.CodecH264 {
+		key := fmt.Sprintf("%s:%s", s.serial, s.codec)
+		if unsupported, ok := deviceUnsupportedCodecs.Load(key); ok && unsupported.(bool) {
+			log.Printf("Device %s lacks encoder for %s (cached); defaulting to %s", s.serial, s.codec, domain.CodecH264)
+			s.codec = domain.CodecH264
+		}
+	}
+
+	targetCodec := s.codec
+	targetAudio := s.audio
+
+	err := s.launchAndConnect(ctx, videoPort, targetCodec, targetAudio)
+	if err != nil && targetAudio {
+		log.Printf("scrcpy-server launch failed with audio=true (%v); retrying with audio=false", err)
+		s.cleanupProcess()
+		s.audio = false
+		err = s.launchAndConnect(ctx, videoPort, targetCodec, false)
+	}
+
+	if err != nil && targetCodec != domain.CodecH264 {
+		log.Printf("scrcpy-server launch failed for codec %s (%v); falling back to universal %s", targetCodec, err, domain.CodecH264)
+		deviceUnsupportedCodecs.Store(fmt.Sprintf("%s:%s", s.serial, targetCodec), true)
+		s.cleanupProcess()
+		s.codec = domain.CodecH264
+		s.audio = targetAudio
+		err = s.launchAndConnect(ctx, videoPort, domain.CodecH264, targetAudio)
+		if err != nil && targetAudio {
+			log.Printf("scrcpy-server launch failed for H.264 with audio=true (%v); retrying with audio=false", err)
+			s.cleanupProcess()
+			s.audio = false
+			err = s.launchAndConnect(ctx, videoPort, domain.CodecH264, false)
+		}
+	}
+
+	if err != nil {
+		s.Close()
+	}
+
+	return err
+}
+
+func (s *Server) launchAndConnect(ctx context.Context, videoPort int, codec domain.VideoCodec, audioEnabled bool) error {
+	args := []string{
 		fmt.Sprintf("CLASSPATH=%s", DeviceServerJarPath),
 		"app_process", "/",
 		"com.genymobile.scrcpy.Server", ScrcpyVersion,
 		"tunnel_forward=true",
 		"video=true",
-		"audio=false",
+	}
+	if audioEnabled {
+		args = append(args,
+			"audio=true",
+			"audio_codec=aac",
+			"audio_bit_rate=128000",
+		)
+	} else {
+		args = append(args, "audio=false")
+	}
+	args = append(args,
 		"control=true",
-		"video_codec=h264",
+		fmt.Sprintf("video_codec=%s", codec),
 		"max_size=0",
 		"max_fps=60",
 		"video_bit_rate=8000000",
@@ -73,6 +174,9 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 		"send_dummy_byte=true",
 		"send_codec_meta=false",
 	)
+
+	// tunnel_forward=true allows the host to connect via adb forward
+	cmd := s.adb.Shell(ctx, s.serial, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -81,21 +185,29 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 	}
 	s.cmd = cmd
 
-	// 4. Connect Connection #1 (Video Socket) with dummy byte verification
+	cmdDone := make(chan error, 1)
+	go func() {
+		cmdDone <- cmd.Wait()
+	}()
+
+	// Connect Connection #1 (Video Socket) with dummy byte verification
 	var videoConn net.Conn
 	addr := fmt.Sprintf("127.0.0.1:%d", videoPort)
 
 	for attempt := 0; attempt < 30; attempt++ {
 		select {
 		case <-ctx.Done():
-			s.Close()
+			s.cleanupProcess()
 			return ctx.Err()
+		case exitErr := <-cmdDone:
+			s.cleanupProcess()
+			return fmt.Errorf("scrcpy-server process exited prematurely: %w", exitErr)
 		default:
 		}
 
 		conn, dialErr := net.DialTimeout("tcp", addr, 500*time.Millisecond)
 		if dialErr != nil {
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(150 * time.Millisecond)
 			continue
 		}
 
@@ -105,7 +217,7 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 		if _, readErr := io.ReadFull(conn, dummy); readErr != nil {
 			// ADB accepted connection but remote Android socket refused; retry
 			_ = conn.Close()
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(150 * time.Millisecond)
 			continue
 		}
 		_ = conn.SetReadDeadline(time.Time{})
@@ -114,24 +226,66 @@ func (s *Server) Start(ctx context.Context, localBinaryPath string, videoPort in
 	}
 
 	if videoConn == nil {
-		s.Close()
+		s.cleanupProcess()
 		return fmt.Errorf("connect video socket on %s: handshake timeout waiting for scrcpy-server", addr)
 	}
 	s.videoConn = videoConn
 
-	// 5. Connect Connection #2 (Control Socket)
+	// Connect Connection #2 (Audio Socket - if audioEnabled)
+	if audioEnabled {
+		audioConn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		if err != nil {
+			s.cleanupProcess()
+			return fmt.Errorf("connect audio socket on %s: %w", addr, err)
+		}
+		s.audioConn = audioConn
+	}
+
+	// Connect Connection #3 (or #2 if audio is disabled): Control Socket
 	controlConn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err != nil {
-		s.Close()
+		s.cleanupProcess()
 		return fmt.Errorf("connect control socket on %s: %w", addr, err)
 	}
 	s.controlConn = controlConn
 
+	// 4. Verify that video encoder actually starts by reading the initial parameter set (SPS/PPS)
+	// If the device lacks an encoder for the selected codec, scrcpy closes the socket with EOF here.
+	_ = videoConn.SetReadDeadline(time.Now().Add(2500 * time.Millisecond))
+	firstPkt, err := ReadVideoPacket(videoConn)
+	_ = videoConn.SetReadDeadline(time.Time{})
+	if err != nil {
+		s.cleanupProcess()
+		return fmt.Errorf("verify video encoder output: %w", err)
+	}
+
+	// Replay initial packet into a transparent stream reader so relay receives all packets intact
+	var ptsFlags uint64 = uint64(firstPkt.PTS)
+	if firstPkt.IsConfig {
+		ptsFlags |= PTSConfigFlag
+	}
+	if firstPkt.IsKeyFrame {
+		ptsFlags |= PTSKeyFlag
+	}
+
+	rawBytes := make([]byte, 12+len(firstPkt.Data))
+	binary.BigEndian.PutUint64(rawBytes[0:8], ptsFlags)
+	binary.BigEndian.PutUint32(rawBytes[8:12], uint32(len(firstPkt.Data)))
+	copy(rawBytes[12:], firstPkt.Data)
+
+	s.videoReader = &readCloser{
+		Reader: io.MultiReader(bytes.NewReader(rawBytes), videoConn),
+		Closer: videoConn,
+	}
+
 	return nil
 }
 
-// VideoConn returns the dedicated video stream socket.
-func (s *Server) VideoConn() net.Conn {
+// VideoConn returns the dedicated video stream reader.
+func (s *Server) VideoConn() io.Reader {
+	if s.videoReader != nil {
+		return s.videoReader
+	}
 	return s.videoConn
 }
 
@@ -140,11 +294,15 @@ func (s *Server) ControlConn() net.Conn {
 	return s.controlConn
 }
 
-// Close terminates process and both TCP socket connections.
-func (s *Server) Close() {
+func (s *Server) cleanupProcess() {
 	if s.videoConn != nil {
 		_ = s.videoConn.Close()
 		s.videoConn = nil
+	}
+	s.videoReader = nil
+	if s.audioConn != nil {
+		_ = s.audioConn.Close()
+		s.audioConn = nil
 	}
 	if s.controlConn != nil {
 		_ = s.controlConn.Close()
@@ -152,9 +310,13 @@ func (s *Server) Close() {
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
 		_ = s.cmd.Process.Kill()
-		_ = s.cmd.Wait()
 		s.cmd = nil
 	}
+}
+
+// Close terminates process and all TCP socket connections (video, audio, control).
+func (s *Server) Close() {
+	s.cleanupProcess()
 	if s.videoPort != 0 && s.adb != nil {
 		_ = s.adb.ForwardRemove(context.Background(), s.serial, s.videoPort)
 		s.videoPort = 0

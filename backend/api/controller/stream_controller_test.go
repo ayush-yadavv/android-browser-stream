@@ -20,7 +20,7 @@ type mockSessionUCForStream struct {
 	err     error
 }
 
-func (m *mockSessionUCForStream) CreateSession(ctx context.Context) (*domain.Session, error) {
+func (m *mockSessionUCForStream) CreateSession(ctx context.Context, opts ...domain.CreateSessionOptions) (*domain.Session, error) {
 	return nil, nil
 }
 func (m *mockSessionUCForStream) GetSession(ctx context.Context, id string) (*domain.Session, error) {
@@ -41,7 +41,7 @@ type mockStreamUCForStream struct {
 	blockRelay  chan struct{}
 }
 
-func (m *mockStreamUCForStream) RelaySession(ctx context.Context, session *domain.Session, ws *websocket.Conn) error {
+func (m *mockStreamUCForStream) RelaySession(ctx context.Context, session *domain.Session, ws domain.WebSocketConn, requestedCodecs ...string) error {
 	m.relayCalled = true
 	if m.blockRelay != nil {
 		<-m.blockRelay

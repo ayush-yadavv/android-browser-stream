@@ -103,4 +103,3 @@ func WriteSetClipboard(w io.Writer, sequence uint64, paste bool, text string) er
 	_, err := w.Write(buf)
 	return err
 }
-

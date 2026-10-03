@@ -18,6 +18,7 @@ import (
 	"github.com/user/android-browser-stream/backend/infrastructure/adb"
 	"github.com/user/android-browser-stream/backend/infrastructure/docker"
 	"github.com/user/android-browser-stream/backend/infrastructure/portpool"
+	"github.com/user/android-browser-stream/backend/infrastructure/recorder"
 	"github.com/user/android-browser-stream/backend/repository"
 	"github.com/user/android-browser-stream/backend/usecase"
 )
@@ -93,7 +94,14 @@ func main() {
 	}
 
 	sessionUC := usecase.NewSessionUsecase(sessionRepo, dockerClient, pool, sessionCfg, env.ContextTimeout, sessionOpts...)
-	streamUC := usecase.NewStreamUsecase(adbClient, sessionRepo, env.ScrcpyBinPath, usecase.WithContainerRepo(dockerClient))
+	recorderFactory := recorder.NewFFmpegRecorderFactory("data/recordings")
+	streamUC := usecase.NewStreamUsecase(
+		adbClient,
+		sessionRepo,
+		env.ScrcpyBinPath,
+		usecase.WithContainerRepo(dockerClient),
+		usecase.WithRecorderFactory(recorderFactory),
+	)
 
 	// 7. Background worker for stale session reclamation
 	tickerStop := make(chan struct{})

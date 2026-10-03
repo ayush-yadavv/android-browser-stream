@@ -9,11 +9,11 @@ import (
 
 // Env stores application configuration loaded via Viper.
 type Env struct {
-	ServerPort     string        `mapstructure:"SERVER_PORT"`
-	ContextTimeout time.Duration `mapstructure:"CONTEXT_TIMEOUT"`
-	MaxSessions    int           `mapstructure:"MAX_SESSIONS"`
-	ADBPortStart   int           `mapstructure:"ADB_PORT_START"`
-	RedroidImage   string        `mapstructure:"REDROID_IMAGE"`
+	ServerPort        string        `mapstructure:"SERVER_PORT"`
+	ContextTimeout    time.Duration `mapstructure:"CONTEXT_TIMEOUT"`
+	MaxSessions       int           `mapstructure:"MAX_SESSIONS"`
+	ADBPortStart      int           `mapstructure:"ADB_PORT_START"`
+	RedroidImage      string        `mapstructure:"REDROID_IMAGE"`
 	ScrcpyBinPath     string        `mapstructure:"SCRCPY_BIN_PATH"`
 	DBPath            string        `mapstructure:"DB_PATH"`
 	PrewarmedPoolSize int           `mapstructure:"PREWARMED_POOL_SIZE"`

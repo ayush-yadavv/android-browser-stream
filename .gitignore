@@ -9,6 +9,19 @@ build/
 *.test
 *.out
 
+# Media & Session Recordings
+*.mp4
+*.mkv
+*.webm
+*.avi
+*.mov
+*.flv
+*.h264
+*.h265
+*.hevc
+*.obu
+backend/data/recordings/
+
 # Go
 vendor/
 backend/bin/scrcpy-server

@@ -20,6 +20,7 @@ func NewSessionRouter(sessionUC domain.SessionUsecase, streamUC domain.StreamUse
 		sessions.GET("", sessionCtrl.List)
 		sessions.GET("/:id", sessionCtrl.Get)
 		sessions.DELETE("/:id", sessionCtrl.Delete)
+		sessions.GET("/:id/recording", sessionCtrl.GetRecording)
 
 		if streamCtrl != nil {
 			sessions.GET("/:id/stream", streamCtrl.HandleStream)

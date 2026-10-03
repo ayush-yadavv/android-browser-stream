@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/server cmd/server
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates android-tools
+RUN apk add --no-cache ca-certificates android-tools ffmpeg
 
 WORKDIR /app
 

@@ -18,22 +18,42 @@ import (
 
 // Channel multiplexing prefixes on single WebSocket connection
 const (
-	ChannelVideo   byte = 0x00
-	ChannelAudio   byte = 0x01
-	ChannelControl byte = 0x02
-	ChannelPing    byte = 0x03
+	ChannelVideo    byte = 0x00
+	ChannelAudio    byte = 0x01
+	ChannelControl  byte = 0x02
+	ChannelPing     byte = 0x03
+	ChannelMetadata byte = 0x04
 )
 
 // StreamRelay handles byte-level multiplexing between TCP sockets and a WebSocket connection.
-type StreamRelay struct{}
+type StreamRelay struct {
+	kioskEnabled bool
+	recorder     domain.SessionRecorder
+	audioReader  io.Reader
+}
 
 // NewStreamRelay constructs a StreamRelay instance.
 func NewStreamRelay() *StreamRelay {
 	return &StreamRelay{}
 }
 
+// SetKioskEnabled toggles server-side input filtering for kiosk mode.
+func (r *StreamRelay) SetKioskEnabled(enabled bool) {
+	r.kioskEnabled = enabled
+}
+
+// SetRecorder sets the SessionRecorder for streaming video packets to disk.
+func (r *StreamRelay) SetRecorder(recorder domain.SessionRecorder) {
+	r.recorder = recorder
+}
+
+// SetAudioReader sets the scrcpy audio stream reader for ChannelAudio (0x01) multiplexing.
+func (r *StreamRelay) SetAudioReader(audioReader io.Reader) {
+	r.audioReader = audioReader
+}
+
 // Relay establishes bidirectional forwarding between video/control sockets and WebSocket.
-func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlWriter io.Writer, ws *websocket.Conn) error {
+func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlWriter io.Writer, ws domain.WebSocketConn, initPackets ...[]byte) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -45,6 +65,12 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 		}()
 	}
 	if closer, ok := controlWriter.(io.Closer); ok {
+		go func() {
+			<-ctx.Done()
+			_ = closer.Close()
+		}()
+	}
+	if closer, ok := r.audioReader.(io.Closer); ok {
 		go func() {
 			<-ctx.Done()
 			_ = closer.Close()
@@ -68,7 +94,17 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 	safeWrite := func(msg []byte) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		return ws.Write(ctx, websocket.MessageBinary, msg)
+		return ws.WriteMessage(ctx, msg)
+	}
+
+	// Send initial metadata frames (e.g. ChannelMetadata 0x04)
+	for _, pkt := range initPackets {
+		if len(pkt) > 0 {
+			if err := safeWrite(pkt); err != nil {
+				setErr(err)
+				return err
+			}
+		}
 	}
 
 	// 1. Video loop: videoReader (scrcpy) -> WebSocket (Channel 0x00)
@@ -86,6 +122,10 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 			if err != nil {
 				setErr(err)
 				return
+			}
+
+			if r.recorder != nil {
+				r.recorder.WritePacket(pkt.Data)
 			}
 
 			// Packet structure: [channel:1][pts_flags:8][size:4][data:N]
@@ -111,7 +151,46 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 		}
 	}()
 
-	// 2. Control & Ping loop: WebSocket (Channel 0x02, 0x03) -> controlWriter / ws echo
+	// 2. Audio loop: audioReader (scrcpy) -> WebSocket (Channel 0x01)
+	if r.audioReader != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				pkt, err := scrcpy.ReadAudioPacket(r.audioReader)
+				if err != nil {
+					// Audio stream disconnected or silent; do not abort video/control session
+					return
+				}
+
+				// Packet structure: [channel:1][pts_flags:8][size:4][data:N]
+				msg := make([]byte, 1+12+len(pkt.Data))
+				msg[0] = ChannelAudio
+
+				var ptsFlags uint64 = uint64(pkt.PTS)
+				if pkt.IsConfig {
+					ptsFlags |= scrcpy.PTSConfigFlag
+				}
+
+				binary.BigEndian.PutUint64(msg[1:9], ptsFlags)
+				binary.BigEndian.PutUint32(msg[9:13], uint32(len(pkt.Data)))
+				copy(msg[13:], pkt.Data)
+
+				if err := safeWrite(msg); err != nil {
+					setErr(err)
+					return
+				}
+			}
+		}()
+	}
+
+	// 3. Control & Ping loop: WebSocket (Channel 0x02, 0x03) -> controlWriter / ws echo
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -122,7 +201,7 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 			default:
 			}
 
-			_, data, err := ws.Read(ctx)
+			data, err := ws.ReadMessage(ctx)
 			if err != nil {
 				setErr(err)
 				return
@@ -145,6 +224,9 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 			}
 
 			if channel == ChannelControl && controlWriter != nil {
+				if r.kioskEnabled && isBlockedKioskControl(payload) {
+					continue
+				}
 				if _, err := controlWriter.Write(payload); err != nil {
 					setErr(err)
 					return
@@ -153,17 +235,83 @@ func (r *StreamRelay) Relay(ctx context.Context, videoReader io.Reader, controlW
 		}
 	}()
 
+	// 3. Device message loop: scrcpy control socket -> WebSocket (Channel 0x02)
+	// Reads incoming device messages (e.g. clipboard changes from Android)
+	if controlReader, ok := controlWriter.(io.Reader); ok {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			typeBuf := make([]byte, 1)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				if _, err := io.ReadFull(controlReader, typeBuf); err != nil {
+					setErr(err)
+					return
+				}
+
+				msgType := typeBuf[0]
+				switch msgType {
+				case 0x00: // DEVICE_MSG_TYPE_CLIPBOARD
+					lenBuf := make([]byte, 4)
+					if _, err := io.ReadFull(controlReader, lenBuf); err != nil {
+						setErr(err)
+						return
+					}
+					length := binary.BigEndian.Uint32(lenBuf)
+					if length > 256*1024 { // 256 KB safety cap
+						if _, err := io.CopyN(io.Discard, controlReader, int64(length)); err != nil {
+							setErr(err)
+							return
+						}
+						continue
+					}
+					textBytes := make([]byte, length)
+					if _, err := io.ReadFull(controlReader, textBytes); err != nil {
+						setErr(err)
+						return
+					}
+
+					// Wrap in ChannelControl (0x02) and relay to WebSocket
+					// Wire format: [ChannelControl:1B][type:1B][length:4B BE][textBytes:N]
+					wsMsg := make([]byte, 1+1+4+length)
+					wsMsg[0] = ChannelControl
+					wsMsg[1] = 0x00
+					copy(wsMsg[2:6], lenBuf)
+					copy(wsMsg[6:], textBytes)
+					if err := safeWrite(wsMsg); err != nil {
+						setErr(err)
+						return
+					}
+				case 0x01: // DEVICE_MSG_TYPE_ACK_CLIPBOARD: [type:1B][sequence:8B BE]
+					seqBytes := make([]byte, 8)
+					if _, err := io.ReadFull(controlReader, seqBytes); err != nil {
+						setErr(err)
+						return
+					}
+				default:
+					// Unknown scrcpy device message type
+				}
+			}
+		}()
+	}
+
 	wg.Wait()
 	return firstErr
 }
 
 // StreamUsecase coordinates device boot readiness, scrcpy execution, and streaming relay.
 type StreamUsecase struct {
-	adb           *adb.Client
-	sessionRepo   domain.SessionRepository
-	containerRepo domain.ContainerRepository
-	scrcpyBinPath string
-	relay         *StreamRelay
+	adb             *adb.Client
+	sessionRepo     domain.SessionRepository
+	containerRepo   domain.ContainerRepository
+	scrcpyBinPath   string
+	relay           *StreamRelay
+	recorderFactory domain.RecorderFactory
 }
 
 // StreamUsecaseOption configures optional dependencies for StreamUsecase.
@@ -173,6 +321,13 @@ type StreamUsecaseOption func(*StreamUsecase)
 func WithContainerRepo(cr domain.ContainerRepository) StreamUsecaseOption {
 	return func(u *StreamUsecase) {
 		u.containerRepo = cr
+	}
+}
+
+// WithRecorderFactory sets the factory for session recording.
+func WithRecorderFactory(f domain.RecorderFactory) StreamUsecaseOption {
+	return func(u *StreamUsecase) {
+		u.recorderFactory = f
 	}
 }
 
@@ -191,7 +346,7 @@ func NewStreamUsecase(adbClient *adb.Client, sr domain.SessionRepository, scrcpy
 }
 
 // RelaySession waits for Android boot, starts scrcpy-server, and relays stream to the WebSocket.
-func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Session, ws *websocket.Conn) error {
+func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Session, ws domain.WebSocketConn, requestedCodecs ...string) error {
 	serial := fmt.Sprintf("127.0.0.1:%d", session.ADBPort)
 
 	// 1. Connect ADB with retry while continuously verifying container health
@@ -250,41 +405,174 @@ func (u *StreamUsecase) RelaySession(ctx context.Context, session *domain.Sessio
 		}
 	}
 
+	// Negotiate codec with client
+	serverSupported := []domain.VideoCodec{domain.CodecH264, domain.CodecH265, domain.CodecAV1}
+	requestedCodec, _ := domain.NegotiateCodec(requestedCodecs, serverSupported)
+
 	// 3. Start scrcpy-server with scrcpy forwarding port = ADBPort + 100
 	scrcpyPort := session.ADBPort + 100
 	server := scrcpy.NewServer(u.adb, serial)
-	if err := server.Start(ctx, u.scrcpyBinPath, scrcpyPort); err != nil {
+	if err := server.Start(ctx, u.scrcpyBinPath, scrcpyPort, requestedCodec); err != nil {
 		return fmt.Errorf("start scrcpy-server: %w", err)
 	}
 	defer server.Close()
 
+	// Actual codec selected after device capability check & encoder fallback
+	chosenCodec := server.Codec()
+	wireID := domain.CodecWireID(chosenCodec)
+
 	// Initial screen wake kick and visual touch indicator setup
 	go func() {
-		time.Sleep(100 * time.Millisecond)
-		wakeCmd := u.adb.Shell(context.Background(), serial, "input", "keyevent", "82")
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+		cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		wakeCmd := u.adb.Shell(cmdCtx, serial, "input", "keyevent", "82")
 		_ = wakeCmd.Run()
-		_ = u.adb.Shell(context.Background(), serial, "settings", "put", "system", "show_touches", "1").Run()
+		_ = u.adb.Shell(cmdCtx, serial, "settings", "put", "system", "show_touches", "1").Run()
 	}()
 
 	// 4. Mark session as streaming
 	_ = u.sessionRepo.UpdateStatus(ctx, session.ID, domain.SessionStatusStreaming)
 
-	// 5. Wrap control socket with LastActiveAt touch updater
+	// Initialize recording if session.Recording is enabled
+	var rec domain.SessionRecorder
+	if session.Recording && u.recorderFactory != nil {
+		r, outPath, err := u.recorderFactory.CreateRecorder(ctx, session.ID, chosenCodec)
+		if err == nil && r != nil {
+			rec = r
+			defer rec.Close()
+			_ = u.sessionRepo.UpdateRecordingPath(ctx, session.ID, outPath)
+		}
+	}
+
+	// Kiosk mode setup (Tier 2: AOSP system policy lockdown + Tier 3: Watchdog)
+	if session.KioskEnabled {
+		targetPkg := session.TargetPackage
+		if targetPkg == "" {
+			targetPkg = "com.android.deskclock"
+		}
+		targetAct := session.TargetActivity
+		if targetAct == "" && targetPkg == "com.android.deskclock" {
+			targetAct = ".DeskClock"
+		}
+
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(300 * time.Millisecond):
+			}
+			cmdCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			// Tier 2: AOSP lockdown
+			// 1. Fabricate Runtime Resource Overlays (FRRO) to set navigation bar height to 0
+			// This permanently removes the NavigationBar from Android SystemUI at the OS compositor level
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "android", "--name", "HideNavBar", "android:dimen/navigation_bar_height", "0x05", "0x00000000").Run()
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "android", "--name", "HideNavBarFrame", "android:dimen/navigation_bar_frame_height", "0x05", "0x00000000").Run()
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "com.android.systemui", "--name", "HideSysUINavBar", "com.android.systemui:dimen/navigation_bar_size", "0x05", "0x00000000").Run()
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "fabricate", "--target", "com.android.systemui", "--name", "HideSysUINavBarFrame", "com.android.systemui:dimen/navigation_bar_frame_height", "0x05", "0x00000000").Run()
+
+			// Enable the fabricated overlays
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideNavBar").Run()
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideNavBarFrame").Run()
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideSysUINavBar").Run()
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "cmd", "overlay", "enable", "com.android.shell:HideSysUINavBarFrame").Run()
+
+			// Restart SystemUI to apply zero-height navigation bar
+			_ = u.adb.Shell(cmdCtx, serial, "su", "0", "pkill", "-f", "com.android.systemui").Run()
+
+			// 2. Send disable flags to StatusBarManager to physically disable Home, Recents, Search, and Notification pull-down
+			_ = u.adb.Shell(cmdCtx, serial, "cmd", "statusbar", "send-disable-flag", "home", "recents", "search", "statusbar-expansion", "notification-peek").Run()
+
+			// 3. Enable lock-to-app / screen pinning policy and immersive fullscreen
+			_ = u.adb.Shell(cmdCtx, serial, "settings", "put", "secure", "lock_to_app_enabled", "1").Run()
+			_ = u.adb.Shell(cmdCtx, serial, "settings", "put", "global", "policy_control", "immersive.full=*").Run()
+
+			// 4. Launch target application
+			if targetAct != "" {
+				_ = u.adb.Shell(cmdCtx, serial, "am", "start", "-n", targetPkg+"/"+targetAct).Run()
+			} else {
+				_ = u.adb.Shell(cmdCtx, serial, "monkey", "-p", targetPkg, "-c", "android.intent.category.LAUNCHER", "1").Run()
+			}
+
+			// Tier 3: Watchdog ensures target app stays in foreground (at 300ms interval)
+			watchdog := NewKioskWatchdog(NewADBClientRunner(u.adb), serial, targetPkg, targetAct, 300*time.Millisecond)
+			watchdog.Start(ctx)
+		}()
+	}
+
+	// 5. Wrap control socket with LastActiveAt touch updater & ReadWriter
 	controlConn := server.ControlConn()
 	var controlWriter io.Writer = controlConn
 	if controlConn != nil {
-		controlWriter = &activityTrackingWriter{
+		controlWriter = &activityTrackingReadWriter{
 			conn:        controlConn,
 			sessionID:   session.ID,
 			sessionRepo: u.sessionRepo,
 		}
 	}
 
-	// 5. Execute relay loop
-	return u.relay.Relay(ctx, server.VideoConn(), controlWriter, ws)
+	// 6. Build Channel 0x04 metadata packet: [0x04][wireID:1B][width:2B BE][height:2B BE]
+	meta := make([]byte, 6)
+	meta[0] = ChannelMetadata
+	meta[1] = wireID
+	w := session.DeviceWidth
+	if w <= 0 {
+		w = 1080
+	}
+	h := session.DeviceHeight
+	if h <= 0 {
+		h = 1920
+	}
+	binary.BigEndian.PutUint16(meta[2:4], uint16(w))
+	binary.BigEndian.PutUint16(meta[4:6], uint16(h))
+
+	// 7. Execute relay loop with per-session options
+	relay := NewStreamRelay()
+	if session.KioskEnabled {
+		relay.SetKioskEnabled(true)
+	}
+	if rec != nil {
+		relay.SetRecorder(rec)
+	}
+	if server.AudioConn() != nil {
+		relay.SetAudioReader(server.AudioConn())
+	}
+
+	return relay.Relay(ctx, server.VideoConn(), controlWriter, ws, meta)
 }
 
-type activityTrackingWriter struct {
+// isBlockedKioskControl checks if an incoming scrcpy control message violates kiosk isolation.
+func isBlockedKioskControl(payload []byte) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	msgType := payload[0]
+	// 1. Keycode injection: drop Home (3), App Switch (187), Power (26), Settings (176), Search (84)
+	if msgType == scrcpy.MsgTypeInjectKeycode && len(payload) >= 6 {
+		keycode := binary.BigEndian.Uint32(payload[2:6])
+		switch keycode {
+		case 3, 187, 26, 176, 84:
+			return true
+		}
+	}
+	// Note: Bottom navigation bar is physically eliminated at the OS compositor level (h=0) via FRRO overlays.
+	// We only guard extreme top-edge swipes (top 15px) to prevent notification shade drag attempts.
+	if msgType == scrcpy.MsgTypeInjectTouchEvent && len(payload) >= 22 {
+		action := payload[1]
+		y := int32(binary.BigEndian.Uint32(payload[14:18]))
+		if action == scrcpy.ActionDown && y < 15 {
+			return true
+		}
+	}
+	return false
+}
+
+type activityTrackingReadWriter struct {
 	conn         net.Conn
 	sessionID    string
 	sessionRepo  domain.SessionRepository
@@ -292,7 +580,15 @@ type activityTrackingWriter struct {
 	mu           sync.Mutex
 }
 
-func (w *activityTrackingWriter) Write(p []byte) (int, error) {
+func (w *activityTrackingReadWriter) Read(p []byte) (int, error) {
+	return w.conn.Read(p)
+}
+
+func (w *activityTrackingReadWriter) Close() error {
+	return w.conn.Close()
+}
+
+func (w *activityTrackingReadWriter) Write(p []byte) (int, error) {
 	n, err := w.conn.Write(p)
 	if n > 0 && w.sessionRepo != nil {
 		w.mu.Lock()
@@ -308,4 +604,23 @@ func (w *activityTrackingWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return n, err
+}
+
+// WSConnAdapter adapts a *websocket.Conn to domain.WebSocketConn.
+type WSConnAdapter struct {
+	Conn *websocket.Conn
+}
+
+// NewWSConnAdapter wraps *websocket.Conn to implement domain.WebSocketConn.
+func NewWSConnAdapter(conn *websocket.Conn) *WSConnAdapter {
+	return &WSConnAdapter{Conn: conn}
+}
+
+func (a *WSConnAdapter) ReadMessage(ctx context.Context) ([]byte, error) {
+	_, data, err := a.Conn.Read(ctx)
+	return data, err
+}
+
+func (a *WSConnAdapter) WriteMessage(ctx context.Context, data []byte) error {
+	return a.Conn.Write(ctx, websocket.MessageBinary, data)
 }

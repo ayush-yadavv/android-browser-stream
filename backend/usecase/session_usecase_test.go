@@ -123,6 +123,33 @@ func TestSessionUsecase_CreateSession_Success(t *testing.T) {
 	assert.Equal(t, 5556, p2)
 }
 
+func TestSessionUsecase_CreateSession_WithOptions(t *testing.T) {
+	uc, sessionRepo, _, _ := setupUsecase(t, 3)
+	ctx := context.Background()
+
+	opts := domain.CreateSessionOptions{
+		KioskEnabled:   true,
+		TargetPackage:  "com.android.calculator2",
+		TargetActivity: ".Calculator",
+		Recording:      true,
+	}
+
+	session, err := uc.CreateSession(ctx, opts)
+	require.NoError(t, err)
+	assert.True(t, session.KioskEnabled)
+	assert.Equal(t, "com.android.calculator2", session.TargetPackage)
+	assert.Equal(t, ".Calculator", session.TargetActivity)
+	assert.True(t, session.Recording)
+
+	// Verify persistence in SQLite
+	persisted, err := sessionRepo.GetByID(ctx, session.ID)
+	require.NoError(t, err)
+	assert.True(t, persisted.KioskEnabled)
+	assert.Equal(t, "com.android.calculator2", persisted.TargetPackage)
+	assert.Equal(t, ".Calculator", persisted.TargetActivity)
+	assert.True(t, persisted.Recording)
+}
+
 func TestSessionUsecase_CreateSession_MaxLimitExceeded(t *testing.T) {
 	uc, _, _, _ := setupUsecase(t, 2)
 	ctx := context.Background()

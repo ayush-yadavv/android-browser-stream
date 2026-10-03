@@ -184,6 +184,7 @@ export REDROID_IMAGE="redroid/redroid:13.0.0-latest"
 export MAX_SESSIONS=3
 export ADB_PORT_START=5555
 export PREWARMED_POOL_SIZE="${PREWARMED_POOL_SIZE:-0}"
+export PATH="${BACKEND_DIR}/bin:${PATH}"
 
 (cd "${BACKEND_DIR}" && go run cmd/server/main.go) &
 BACKEND_PID=$!

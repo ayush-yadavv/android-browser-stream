@@ -5,12 +5,14 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/user/android-browser-stream/backend/domain"
+	"github.com/user/android-browser-stream/backend/usecase"
 )
 
 // StreamController handles WebSocket upgrade and streaming relay for sessions.
@@ -79,8 +81,18 @@ func (sc *StreamController) HandleStream(c *gin.Context) {
 
 	log.Printf("Stream WebSocket client connected for session %s (ADB port %d)", sessionID, session.ADBPort)
 
+	// Extract requested codecs from URL query (e.g. ?codecs=av1,h265,h264)
+	var requestedCodecs []string
+	if codecsParam := c.Query("codecs"); codecsParam != "" {
+		for _, part := range strings.Split(codecsParam, ",") {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				requestedCodecs = append(requestedCodecs, trimmed)
+			}
+		}
+	}
+
 	// Block on streaming relay loop until client disconnects or container terminates
-	if err := sc.streamUsecase.RelaySession(c.Request.Context(), session, conn); err != nil {
+	if err := sc.streamUsecase.RelaySession(c.Request.Context(), session, usecase.NewWSConnAdapter(conn), requestedCodecs...); err != nil {
 		log.Printf("Stream relay terminated for session %s: %v", sessionID, err)
 		reason := err.Error()
 		if len(reason) > 120 {

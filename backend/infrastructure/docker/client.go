@@ -68,6 +68,9 @@ func (c *Client) Create(ctx context.Context, cfg domain.ContainerConfig) (string
 		"androidboot.use_memfd=1",
 		"ro.setupwizard.mode=DISABLED",
 	}
+	if cfg.KioskEnabled {
+		cmdArgs = append(cmdArgs, "qemu.hw.mainkeys=1")
+	}
 
 	containerName := fmt.Sprintf("redroid-session-%d-%d", cfg.ADBPort, time.Now().Unix())
 

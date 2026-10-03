@@ -82,7 +82,12 @@ func NewSessionUsecase(
 	return u
 }
 
-func (u *sessionUsecase) CreateSession(ctx context.Context) (*domain.Session, error) {
+func (u *sessionUsecase) CreateSession(ctx context.Context, opts ...domain.CreateSessionOptions) (*domain.Session, error) {
+	var opt domain.CreateSessionOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
 	// Respect BootTimeout for container provisioning
 	timeout := u.timeout
 	if u.config.BootTimeout > timeout {
@@ -111,18 +116,24 @@ func (u *sessionUsecase) CreateSession(ctx context.Context) (*domain.Session, er
 	now := time.Now().UTC()
 
 	// 2. Try acquiring an already-booted container from the prewarmed pool (< 5ms)
-	if u.prewarmedPool != nil {
+	// Containers in prewarmed pool are pre-booted without kiosk lockdown flags (qemu.hw.mainkeys=1).
+	// If KioskEnabled is requested, bypass the prewarmed pool to provision a container with hardware lockdown flags.
+	if u.prewarmedPool != nil && !opt.KioskEnabled {
 		warm, err := u.prewarmedPool.Acquire(ctx)
 		if err == nil && warm != nil {
 			session := &domain.Session{
-				ID:           uuid.New().String(),
-				ContainerID:  warm.ContainerID,
-				ADBPort:      warm.ADBPort,
-				Status:       domain.SessionStatusReady,
-				DeviceWidth:  u.config.DeviceWidth,
-				DeviceHeight: u.config.DeviceHeight,
-				CreatedAt:    now,
-				LastActiveAt: now,
+				ID:             uuid.New().String(),
+				ContainerID:    warm.ContainerID,
+				ADBPort:        warm.ADBPort,
+				Status:         domain.SessionStatusReady,
+				DeviceWidth:    u.config.DeviceWidth,
+				DeviceHeight:   u.config.DeviceHeight,
+				KioskEnabled:   opt.KioskEnabled,
+				TargetPackage:  opt.TargetPackage,
+				TargetActivity: opt.TargetActivity,
+				Recording:      opt.Recording,
+				CreatedAt:      now,
+				LastActiveAt:   now,
 			}
 			if err := u.sessionRepo.Create(ctx, session); err != nil {
 				_ = u.containerRepo.Stop(ctx, warm.ContainerID)
@@ -141,13 +152,17 @@ func (u *sessionUsecase) CreateSession(ctx context.Context) (*domain.Session, er
 	}
 
 	session := &domain.Session{
-		ID:           uuid.New().String(),
-		ADBPort:      port,
-		Status:       domain.SessionStatusCreating,
-		DeviceWidth:  u.config.DeviceWidth,
-		DeviceHeight: u.config.DeviceHeight,
-		CreatedAt:    now,
-		LastActiveAt: now,
+		ID:             uuid.New().String(),
+		ADBPort:        port,
+		Status:         domain.SessionStatusCreating,
+		DeviceWidth:    u.config.DeviceWidth,
+		DeviceHeight:   u.config.DeviceHeight,
+		KioskEnabled:   opt.KioskEnabled,
+		TargetPackage:  opt.TargetPackage,
+		TargetActivity: opt.TargetActivity,
+		Recording:      opt.Recording,
+		CreatedAt:      now,
+		LastActiveAt:   now,
 	}
 
 	// 3. Persist initial session record
@@ -165,8 +180,9 @@ func (u *sessionUsecase) CreateSession(ctx context.Context) (*domain.Session, er
 		DPI:         u.config.DeviceDPI,
 		FPS:         u.config.DeviceFPS,
 		GPUMode:     u.config.GPUMode,
-		MemoryLimit: 4 * 1024 * 1024 * 1024,
-		CPULimit:    2 * 1e9,
+		MemoryLimit:  4 * 1024 * 1024 * 1024,
+		CPULimit:     2 * 1e9,
+		KioskEnabled: opt.KioskEnabled,
 	}
 
 	containerID, err := u.containerRepo.Create(ctx, containerConfig)
@@ -222,7 +238,7 @@ func (u *sessionUsecase) DestroySession(ctx context.Context, id string) error {
 	}
 
 	// Idempotency guard: prevent duplicate port releases and teardown races
-	if session.Status == domain.SessionStatusTerminated {
+	if session.Status == domain.SessionStatusTerminated || session.Status == domain.SessionStatusTerminating {
 		return nil
 	}
 

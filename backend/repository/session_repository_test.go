@@ -35,14 +35,19 @@ func TestSQLiteSessionRepository_CRUD(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	s := &domain.Session{
-		ID:           "test-session-1",
-		ContainerID:  "container-123",
-		ADBPort:      5555,
-		Status:       domain.SessionStatusReady,
-		DeviceWidth:  1080,
-		DeviceHeight: 1920,
-		CreatedAt:    now,
-		LastActiveAt: now,
+		ID:             "test-session-1",
+		ContainerID:    "container-123",
+		ADBPort:        5555,
+		Status:         domain.SessionStatusReady,
+		DeviceWidth:    1080,
+		DeviceHeight:   1920,
+		KioskEnabled:   true,
+		TargetPackage:  "com.android.calculator2",
+		TargetActivity: ".Calculator",
+		Recording:      true,
+		RecordingPath:  "data/recordings/test-session-1.mp4",
+		CreatedAt:      now,
+		LastActiveAt:   now,
 	}
 
 	// 1. Create
@@ -58,6 +63,18 @@ func TestSQLiteSessionRepository_CRUD(t *testing.T) {
 	assert.Equal(t, s.Status, fetched.Status)
 	assert.Equal(t, s.DeviceWidth, fetched.DeviceWidth)
 	assert.Equal(t, s.DeviceHeight, fetched.DeviceHeight)
+	assert.True(t, fetched.KioskEnabled)
+	assert.Equal(t, "com.android.calculator2", fetched.TargetPackage)
+	assert.Equal(t, ".Calculator", fetched.TargetActivity)
+	assert.True(t, fetched.Recording)
+	assert.Equal(t, "data/recordings/test-session-1.mp4", fetched.RecordingPath)
+
+	// Update recording path
+	err = repo.UpdateRecordingPath(ctx, "test-session-1", "data/recordings/updated.mp4")
+	require.NoError(t, err)
+	fetched, err = repo.GetByID(ctx, "test-session-1")
+	require.NoError(t, err)
+	assert.Equal(t, "data/recordings/updated.mp4", fetched.RecordingPath)
 
 	// 3. UpdateStatus
 	err = repo.UpdateStatus(ctx, "test-session-1", domain.SessionStatusStreaming)

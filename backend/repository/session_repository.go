@@ -29,21 +29,51 @@ func (r *SQLiteSessionRepository) Migrate(ctx context.Context) error {
 		status TEXT NOT NULL,
 		device_width INTEGER NOT NULL,
 		device_height INTEGER NOT NULL,
+		kiosk_enabled INTEGER NOT NULL DEFAULT 0,
+		target_package TEXT NOT NULL DEFAULT '',
+		target_activity TEXT NOT NULL DEFAULT '',
+		recording INTEGER NOT NULL DEFAULT 0,
+		recording_path TEXT NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL,
 		last_active_at DATETIME NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 	CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at);
 	`
-	_, err := r.db.ExecContext(ctx, query)
-	return err
+	if _, err := r.db.ExecContext(ctx, query); err != nil {
+		return err
+	}
+
+	// Idempotent column migrations for existing SQLite databases
+	cols := []string{
+		"ALTER TABLE sessions ADD COLUMN kiosk_enabled INTEGER NOT NULL DEFAULT 0;",
+		"ALTER TABLE sessions ADD COLUMN target_package TEXT NOT NULL DEFAULT '';",
+		"ALTER TABLE sessions ADD COLUMN target_activity TEXT NOT NULL DEFAULT '';",
+		"ALTER TABLE sessions ADD COLUMN recording INTEGER NOT NULL DEFAULT 0;",
+		"ALTER TABLE sessions ADD COLUMN recording_path TEXT NOT NULL DEFAULT '';",
+	}
+	for _, colStmt := range cols {
+		_, _ = r.db.ExecContext(ctx, colStmt)
+	}
+	return nil
 }
 
 func (r *SQLiteSessionRepository) Create(ctx context.Context, s *domain.Session) error {
 	query := `
-	INSERT INTO sessions (id, container_id, adb_port, status, device_width, device_height, created_at, last_active_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO sessions (id, container_id, adb_port, status, device_width, device_height,
+		kiosk_enabled, target_package, target_activity, recording, recording_path,
+		created_at, last_active_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
+	kioskVal := 0
+	if s.KioskEnabled {
+		kioskVal = 1
+	}
+	recVal := 0
+	if s.Recording {
+		recVal = 1
+	}
+
 	_, err := r.db.ExecContext(ctx, query,
 		s.ID,
 		s.ContainerID,
@@ -51,6 +81,11 @@ func (r *SQLiteSessionRepository) Create(ctx context.Context, s *domain.Session)
 		string(s.Status),
 		s.DeviceWidth,
 		s.DeviceHeight,
+		kioskVal,
+		s.TargetPackage,
+		s.TargetActivity,
+		recVal,
+		s.RecordingPath,
 		s.CreatedAt.UTC().Format(time.RFC3339),
 		s.LastActiveAt.UTC().Format(time.RFC3339),
 	)
@@ -62,11 +97,14 @@ func (r *SQLiteSessionRepository) Create(ctx context.Context, s *domain.Session)
 
 func (r *SQLiteSessionRepository) GetByID(ctx context.Context, id string) (*domain.Session, error) {
 	query := `
-	SELECT id, container_id, adb_port, status, device_width, device_height, created_at, last_active_at
+	SELECT id, container_id, adb_port, status, device_width, device_height,
+		kiosk_enabled, target_package, target_activity, recording, recording_path,
+		created_at, last_active_at
 	FROM sessions WHERE id = ?
 	`
 	var s domain.Session
 	var statusStr, createdAtStr, lastActiveAtStr string
+	var kioskVal, recVal int
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&s.ID,
@@ -75,6 +113,11 @@ func (r *SQLiteSessionRepository) GetByID(ctx context.Context, id string) (*doma
 		&statusStr,
 		&s.DeviceWidth,
 		&s.DeviceHeight,
+		&kioskVal,
+		&s.TargetPackage,
+		&s.TargetActivity,
+		&recVal,
+		&s.RecordingPath,
 		&createdAtStr,
 		&lastActiveAtStr,
 	)
@@ -86,6 +129,8 @@ func (r *SQLiteSessionRepository) GetByID(ctx context.Context, id string) (*doma
 	}
 
 	s.Status = domain.SessionStatus(statusStr)
+	s.KioskEnabled = kioskVal == 1
+	s.Recording = recVal == 1
 	s.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 	s.LastActiveAt, _ = time.Parse(time.RFC3339, lastActiveAtStr)
 
@@ -94,7 +139,9 @@ func (r *SQLiteSessionRepository) GetByID(ctx context.Context, id string) (*doma
 
 func (r *SQLiteSessionRepository) List(ctx context.Context) ([]*domain.Session, error) {
 	query := `
-	SELECT id, container_id, adb_port, status, device_width, device_height, created_at, last_active_at
+	SELECT id, container_id, adb_port, status, device_width, device_height,
+		kiosk_enabled, target_package, target_activity, recording, recording_path,
+		created_at, last_active_at
 	FROM sessions ORDER BY created_at DESC
 	`
 	rows, err := r.db.QueryContext(ctx, query)
@@ -107,6 +154,7 @@ func (r *SQLiteSessionRepository) List(ctx context.Context) ([]*domain.Session, 
 	for rows.Next() {
 		var s domain.Session
 		var statusStr, createdAtStr, lastActiveAtStr string
+		var kioskVal, recVal int
 
 		if err := rows.Scan(
 			&s.ID,
@@ -115,6 +163,11 @@ func (r *SQLiteSessionRepository) List(ctx context.Context) ([]*domain.Session, 
 			&statusStr,
 			&s.DeviceWidth,
 			&s.DeviceHeight,
+			&kioskVal,
+			&s.TargetPackage,
+			&s.TargetActivity,
+			&recVal,
+			&s.RecordingPath,
 			&createdAtStr,
 			&lastActiveAtStr,
 		); err != nil {
@@ -122,6 +175,8 @@ func (r *SQLiteSessionRepository) List(ctx context.Context) ([]*domain.Session, 
 		}
 
 		s.Status = domain.SessionStatus(statusStr)
+		s.KioskEnabled = kioskVal == 1
+		s.Recording = recVal == 1
 		s.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 		s.LastActiveAt, _ = time.Parse(time.RFC3339, lastActiveAtStr)
 		sessions = append(sessions, &s)
@@ -169,6 +224,19 @@ func (r *SQLiteSessionRepository) UpdateLastActive(ctx context.Context, id strin
 	return nil
 }
 
+func (r *SQLiteSessionRepository) UpdateRecordingPath(ctx context.Context, id string, path string) error {
+	query := `UPDATE sessions SET recording_path = ? WHERE id = ?`
+	res, err := r.db.ExecContext(ctx, query, path, id)
+	if err != nil {
+		return fmt.Errorf("update recording path: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err == nil && rows == 0 {
+		return domain.ErrSessionNotFound
+	}
+	return nil
+}
+
 func (r *SQLiteSessionRepository) Delete(ctx context.Context, id string) error {
 	query := `DELETE FROM sessions WHERE id = ?`
 	_, err := r.db.ExecContext(ctx, query, id)
@@ -181,7 +249,9 @@ func (r *SQLiteSessionRepository) Delete(ctx context.Context, id string) error {
 func (r *SQLiteSessionRepository) GetStale(ctx context.Context, olderThan time.Duration) ([]*domain.Session, error) {
 	threshold := time.Now().UTC().Add(-olderThan).Format(time.RFC3339)
 	query := `
-	SELECT id, container_id, adb_port, status, device_width, device_height, created_at, last_active_at
+	SELECT id, container_id, adb_port, status, device_width, device_height,
+		kiosk_enabled, target_package, target_activity, recording, recording_path,
+		created_at, last_active_at
 	FROM sessions
 	WHERE last_active_at < ? AND status != ?
 	`
@@ -195,6 +265,7 @@ func (r *SQLiteSessionRepository) GetStale(ctx context.Context, olderThan time.D
 	for rows.Next() {
 		var s domain.Session
 		var statusStr, createdAtStr, lastActiveAtStr string
+		var kioskVal, recVal int
 
 		if err := rows.Scan(
 			&s.ID,
@@ -203,6 +274,11 @@ func (r *SQLiteSessionRepository) GetStale(ctx context.Context, olderThan time.D
 			&statusStr,
 			&s.DeviceWidth,
 			&s.DeviceHeight,
+			&kioskVal,
+			&s.TargetPackage,
+			&s.TargetActivity,
+			&recVal,
+			&s.RecordingPath,
 			&createdAtStr,
 			&lastActiveAtStr,
 		); err != nil {
@@ -210,6 +286,8 @@ func (r *SQLiteSessionRepository) GetStale(ctx context.Context, olderThan time.D
 		}
 
 		s.Status = domain.SessionStatus(statusStr)
+		s.KioskEnabled = kioskVal == 1
+		s.Recording = recVal == 1
 		s.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
 		s.LastActiveAt, _ = time.Parse(time.RFC3339, lastActiveAtStr)
 		sessions = append(sessions, &s)

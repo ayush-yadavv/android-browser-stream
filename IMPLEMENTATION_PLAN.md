@@ -2,307 +2,301 @@
 
 ## Goal Description
 
-Build a full-stack web application that streams a live, interactive Android device to a browser within a 72-hour deadline. Users open a public HTTPS URL, see a real Android 13 screen updating in real-time via WebCodecs `VideoDecoder`, and interact with it using mouse/touch and keyboard. Each user gets an isolated, ephemeral `redroid` container orchestrated by a Go backend following Clean Architecture.
+Build an enterprise-grade, full-stack web application that streams a live, interactive Android device to a browser within a 72-hour deadline. Users open a public HTTPS URL, see a real Android 13 screen updating in real-time via WebCodecs `VideoDecoder`, and interact with it using mouse/touch/D-pad and keyboard. Each user gets an isolated, ephemeral `redroid` container orchestrated by a Go backend following Clean Architecture.
 
-### What We're Building
+### System Architecture Overview
 
 ```mermaid
 flowchart LR
     subgraph "Cloud VM · Ubuntu 22.04/24.04"
-        subgraph "Per-Session Container"
+        subgraph "Per-Session Container (redroid)"
             RED["redroid:13.0.0\n(Android 13 ART)"]
-            SCR["scrcpy-server v2.7\n(H.264 Capture)"]
+            SCR["scrcpy-server v2.7\n(Capture & Control)"]
+            DPC["Headless DPC Helper\n(Lock Task Mode)"]
         end
-        ADB["ADB TCP\nPort Pool"]
-        GO["Go Backend\n(Gin + coder/websocket)\n(Docker SDK)"]
-        SQL[(SQLite)]
-        CAD["Caddy\n(Auto HTTPS)"]
+        ADB["ADB TCP Port Pool\n(:5555-:5557)"]
+        
+        subgraph "Go Backend Service (Clean Architecture)"
+            API["API Gateway / Controllers\n(Gin HTTP + WS Upgrade)"]
+            UC["Use Cases\n(Session, Stream Relay, Kiosk, Watchdog)"]
+            REC["FFmpeg Recorder Worker\n(Stream Copy fMP4 Pipe)"]
+            INFRA["Infrastructure Adapters\n(Docker SDK, ADB, Scrcpy, PortPool)"]
+            SQL[(SQLite Metadata)]
+        end
+        
+        CAD["Caddy Reverse Proxy\n(Auto Let's Encrypt HTTPS / WSS)"]
     end
 
-    subgraph "Browser"
-        REACT["React + Vite\n(Framer Dark UI)"]
-        WC["WebCodecs\nVideoDecoder"]
-        CANVAS["HTML5 Canvas\n(desynchronized)"]
+    subgraph "Browser Client (Presentation Layer Only)"
+        REACT["React 18 + Vite SPA\n(Framer Dark UI)"]
+        DEMUX["Resilient WS Demuxer\n(Channel 0x00..0x04)"]
+        WC["WebCodecs VideoDecoder\n(Codec Factory: H.264/H.265/AV1)"]
+        CANVAS["HTML5 Canvas\n(desynchronized 2D)"]
+        INPUT["Input System\n(Touch, D-pad, Pointer Lock, Clipboard)"]
     end
 
-    RED <-->|"screen buffer"| SCR
-    SCR -->|"Raw H.264 NAL\n(video socket)"| ADB
-    ADB <-->|"TCP forward"| GO
-    GO <-->|"Single WSS\n0x00=Video\n0x01=Audio\n0x02=Control"| CAD
-    GO --- SQL
+    RED <-->|"Screen Buffer / Input"| SCR
+    SCR -->|"Video Socket (Annex B NAL)"| ADB
+    SCR <-->|"Control Socket (Binary Protocol)"| ADB
+    ADB <-->|"TCP Forward"| INFRA
+    INFRA <--> UC
+    UC -->|"Raw NAL Tee (Non-blocking)"| REC
+    UC <--> API
+    API <-->|"WSS Multiplex:\n0x00=Video, 0x02=Control\n0x03=Ping, 0x04=Metadata"| CAD
+    API --- SQL
     CAD <-->|"HTTPS / WSS"| REACT
-    REACT --> WC --> CANVAS
-    CANVAS -.->|"Touch/Key Events"| REACT
+    REACT --> DEMUX
+    DEMUX -->|"0x00 Video"| WC --> CANVAS
+    DEMUX <-->|"0x02 Device Msg / Clipboard"| INPUT
+    INPUT -.->|"User Actions"| DEMUX
 ```
+
+---
 
 ### Requirements Coverage Matrix
 
-| Requirement | Priority | Phase | How It's Met |
-|:---|:---:|:---:|:---|
-| CR-1: Continuous real-time screen | **Must** | 3 | scrcpy H.264 → WS relay → WebCodecs VideoDecoder → Canvas |
-| CR-2: Interactive input forwarding | **Must** | 4 | getBoundingClientRect normalization → binary control msgs → scrcpy |
-| CR-3: Latency measurement | **Must** | 6 | Visual Loopback test (ms clock app vs browser frame) + latency HUD |
-| CR-4: Reproducible single-machine | **Must** | 1,7 | docker-compose.yml + setup-vm.sh + README |
-| CR-5: Public deployed link | **Must** | 7 | Cloud VM + Caddy auto-HTTPS |
-| BR-1: Isolated instance per user | **Bonus** | 2 | Per-session redroid container via Docker SDK |
-| BR-2: On-demand lifecycle | **Bonus** | 2 | Create on POST, destroy on disconnect/idle |
+| Requirement | Priority | PRD Section | Phase | Selected Best Approach & Architecture |
+|:---|:---:|:---:|:---:|:---|
+| **CR-1: Continuous Real-Time Streaming** | **Must** | §3 FR-1 | 3 | scrcpy v2.7 Annex B NALs → WS binary relay → WebCodecs VideoDecoder. Codec-agnostic design with runtime negotiation (H.264 Baseline floor, H.265, AV1). |
+| **CR-2: Normalized Input Forwarding** | **Must** | §3 FR-2 | 4 | `getBoundingClientRect()` normalized coordinates (0.0–1.0) → i16-fixed-point scroll → scrcpy binary control messages (`INJECT_TOUCH_EVENT`, `INJECT_SCROLL_EVENT`). |
+| **CR-2 Senior: D-pad vs. Touch Mode Toggle** | **Must (Senior)** | §3 FR-2 | 4, 5 | Segmented UI toggle + Virtual TV Remote. In D-pad mode, raw touch is suppressed to prevent Android Touch Mode flapping (`isInTouchMode=false`); navigation emits `KEYCODE_DPAD_*` (19–23). |
+| **CR-3: Latency Measurement** | **Must** | §3 FR-3 | 6 | Standardized Visual Loopback test (sub-millisecond clock rendered in Android vs. canvas capture) + real-time glass-to-glass Latency HUD overlay. |
+| **CR-4: Reproducible Execution** | **Must** | §3 FR-4 | 1, 7 | Single-machine automated orchestration via `docker-compose.yml`, `setup-vm.sh`, kernel binder loading, and documented verification scripts. |
+| **CR-5: Public Deployed HTTPS Link** | **Must** | §3 FR-5 | 7 | Public Cloud VM deployment fronted by Caddy for auto-TLS (Let's Encrypt), satisfying WebCodecs Secure Context requirements. |
+| **BR-1: Isolated Instance per User** | **Bonus** | §4 BR-1 | 2 | Per-session ephemeral redroid container via Go Docker SDK, isolated bridge network, dedicated ADB port, zero cross-session state leakage. |
+| **BR-2: On-Demand Lifecycle Management** | **Bonus** | §4 BR-2 | 2 | Ephemeral container boot on handshake/POST, heartbeat tracking, auto-termination on idle timeout (15 min) or disconnect with immediate resource reclamation. |
+| **BR-3: Two-Way Clipboard Synchronization** | **Bonus** | §4 BR-3 | 4 | Native scrcpy bidirectional control protocol (`SET_CLIPBOARD` 0x09 + `DEVICE_MSG_TYPE_CLIPBOARD` 0x00) with browser Clipboard API, echo loop suppression, and XSS sanitization. |
+| **BR-4: Kiosk Mode Enforcement** | **Bonus** | §4 BR-4 | 2, 4 | 3-Tier Defense-in-Depth: (1) Server-side Go control keycode filter (`HOME`, `RECENTS`, `POWER` dropped), (2) Android Lock Task Mode / immersive policy, (3) Go activity watchdog daemon. |
+| **BR-5: Automated Session Recording** | **Bonus** | §4 BR-5 | 3 | Go non-blocking stream tee → FFmpeg stdin pipe remuxing raw Annex B NALs to Fragmented MP4 (`-c:v copy -movflags frag_keyframe+empty_moov+default_base_moof`) tied to Session ID. |
+| **Senior Edge Case: Pointer Lock API** | **Quality** | §7 | 4 | `requestPointerLock()` for relative mouse delta control with virtual cursor state machine; suppresses `KEYCODE_BACK` on `Escape` key when locked. |
+| **Senior Edge Case: Special Characters** | **Quality** | §7 | 4 | Binary `INJECT_TEXT` (0x01) UTF-8 injection for `'`, `&`, emojis, and unicode symbols; completely bypasses shell command injection risks. Empty search guarded. |
+| **Senior Edge Case: Resilient Demuxing** | **Quality** | §7 | 3, 4 | Length-bounded framing (16MB cap), corrupted packet drop, IDR keyframe resynchronization, and automatic `VideoDecoder` crash recreation circuit breaker. |
+| **AI Compliance: Pivot Decisions & Audit** | **Compliance** | §5 | Ongoing | Append-only `PROCESS_LOG.md` recording verbatim prompts, timestamps, suboptimal AI suggestions, architectural pivot rationale, and human vs. AI contribution matrix. |
 
 ---
 
-## Resolved Technical Decisions
+## Resolved Technical Decisions & Industry Best Practices
 
-| Decision | Resolution | Rationale |
-|:---|:---|:---|
-| Backend language | **Go 1.22+** | Single binary, low memory, fast `os/exec` for ADB, efficient byte streaming |
-| Frontend framework | **React + Vite + TypeScript + Tailwind** | Fast HMR, simple SPA (no SSR needed for streaming canvas) |
-| Design system | **Framer-inspired dark canvas** per `DESIGN.md` | Dark-only, Inter Variable body, Mona Sans display |
-| Android runtime | **`redroid/redroid:13.0.0-latest`** | Real AOSP ART, no QEMU overhead, sub-5s cold boot, GPL-3.0 |
-| Screen capture | **scrcpy-server v2.7** | Zero-transcode H.264 Baseline NAL forwarding |
-| WebSocket lib | **`github.com/coder/websocket`** | Pure Go, formerly nhooyr/websocket, well-maintained |
-| HTTP framework | **Gin** | Matches GO-BACKEND-BEST-PRACTICES.md reference architecture |
-| Container SDK | **Go Docker SDK** (`github.com/docker/docker/client`) | Native Go, full container lifecycle control |
-| Docker networking | **Bridge mode** + dynamic port map (`-p HOST:5555`) | Avoids port collision with host networking |
-| Ephemeral storage | **`--rm` + `AutoRemove: true`** | Container auto-deletes on stop, zero state leakage |
-| TLS termination | **Caddy** with auto Let's Encrypt | Zero-config HTTPS, required for WebCodecs Secure Context |
-| Persistence | **SQLite** via `modernc.org/sqlite` (pure Go, no CGO) | Lightweight session metadata, no heavy DB cluster |
-| Audio | **Out of scope** | Optional stretch; focus on sub-50ms video + touch |
-| WS multiplexing | **1-byte channel prefix** (`0x00`=Video, `0x02`=Control) | Matches scrcpy architecture, single port per session |
+| Domain | Selected Decision | Evaluated Alternatives | Rationale & Trade-off Analysis |
+|:---|:---|:---|:---|
+| **Backend Architecture** | **Go 1.22+ Clean Architecture** | Node.js, Python, Rust | Go provides sub-millisecond goroutine scheduling, zero GC stalls for byte relaying, memory efficiency for 50+ concurrent sessions, and strict Clean Architecture layer separation. |
+| **Screen Streaming Pipeline** | **scrcpy-server v2.7 → TCP Forward → Go WS Relay → WebCodecs** | WebRTC (Pion/GStreamer), VNC/RFB, MJPEG | Direct H.264 Annex B pass-through via WebCodecs delivers sub-30ms glass-to-glass latency with zero server transcoding overhead. Avoids WebRTC SDP signaling complexity in 72h window. |
+| **Codec Strategy** | **Codec-Agnostic with Capability Negotiation** | Fixed H.264 only | Browser probes `VideoDecoder.isConfigSupported()`, sends preferences in WS URL (`?codecs=av1,h265,h264`); Go selects optimal codec, sends Channel `0x04` metadata, and instantiates codec handler. |
+| **D-pad vs. Touch Interaction** | **Hybrid Protocol & Virtual TV Remote** | Raw Touch only, CLI ADB only | Prevents the Android "Touch Mode Flapping" bug where touch events strip visual focus rings on Android TV/Leanback apps. Suppresses touch in D-pad mode, emitting `KEYCODE_DPAD_*`. |
+| **Clipboard Sync** | **Native scrcpy Bidirectional Control** | `STFService.apk`, ADB shell commands | `STFService.apk` is broken on Android 10+ background apps. scrcpy runs via `app_process` (UID 2000), accessing `IClipboard` directly. Zero extra APKs, sub-millisecond sync. |
+| **Kiosk Mode** | **3-Tier Defense-in-Depth** | Browser-only blocking, Screen pinning | Browser-only controls are easily bypassed via DevTools/custom WS clients. 3 tiers: Go server keycode/edge filter + AOSP Lock Task Mode + Go background activity guardian watchdog. |
+| **Session Recording** | **FFmpeg Pipe Stream Copy (Fragmented MP4)** | Pure Go muxers (`gomedia`), raw `.h264`, Android `screenrecord` | Near-zero CPU (<1%), zero transcoding (`-c:v copy`), crash-safe fragmented MP4 (`moof` atoms), immediately playable in web browsers via `<video>`. |
+| **Mouse Control** | **Dual-Mode: Absolute + Pointer Lock** | Absolute mouse only | Absolute coordinates are standard for touch apps; Pointer Lock is enabled via UI toggle for 3D games and relative cursor control with virtual cursor state machine. |
+| **Frontend Framework** | **React 18 + Vite + TypeScript + Tailwind** | Next.js, Vue, Vanilla JS | Rapid SPA development, zero SSR overhead for canvas streaming, strict typing for binary packet structures, Framer dark theme design system. |
+| **TLS & Reverse Proxy** | **Caddy v2** | Nginx, Traefik, Cloudflare Tunnel | Automatic zero-config Let's Encrypt SSL/TLS certificates; required for WebCodecs Secure Context (`window.isSecureContext === true`). |
 
 ---
 
-## Research Findings: Protocol Specifications
+## In-Depth Architectural & Protocol Specifications
 
-### scrcpy-server v2.7 Connection Flow
+### 1. scrcpy-server Connection Flow & Multiplexing
+
+The system utilizes a single full-duplex WebSocket connection between browser and Go backend. Packets are framed with a **1-byte channel prefix**:
+- `0x00`: Video Frame (scrcpy 12-byte header + raw NAL payload)
+- `0x01`: Audio Frame (Reserved for future extension)
+- `0x02`: Control / Device Message (Bidirectional touch, keys, clipboard)
+- `0x03`: Ping / Pong / Latency probe
+- `0x04`: Stream Metadata & Codec Negotiation Handshake
 
 ```mermaid
 sequenceDiagram
-    participant Go as Go Backend
-    participant ADB as ADB Daemon
-    participant Scrcpy as scrcpy-server
-    participant WS as WebSocket Client
+    participant Browser as Browser Client
+    participant Caddy as Caddy (TLS)
+    participant Go as Go Backend Relay
+    participant ADB as ADB Host Daemon
+    participant Scrcpy as scrcpy-server (Guest)
 
-    Go->>ADB: adb push scrcpy-server.jar /data/local/tmp/
-    Go->>ADB: adb shell CLASSPATH=... app_process / Server 2.7 ...
-    Note over Scrcpy: Server creates LocalServerSocket("scrcpy")
+    Browser->>Caddy: WSS /api/sessions/:id/stream?codecs=av1,h265,h264
+    Caddy->>Go: Forward WebSocket Upgrade
     Go->>ADB: adb forward tcp:PORT localabstract:scrcpy
-
-    Go->>Scrcpy: TCP Connection #1 (Video Socket)
-    Scrcpy-->>Go: Dummy byte (0x00) [if send_dummy_byte=true]
-    Scrcpy-->>Go: Device name (64 bytes) [if send_device_meta=true]
-    Scrcpy-->>Go: Codec meta (12 bytes) [if send_codec_meta=true]
-    Scrcpy-->>Go: [12B header + NAL data] repeated...
-
-    Go->>Scrcpy: TCP Connection #2 (Control Socket)
-    Note over Go: Both sockets established, relay begins
-
-    WS->>Go: WebSocket connect
-    loop Streaming
-        Scrcpy-->>Go: H.264 packet (12B header + NALs)
-        Go-->>WS: [0x00][12B header][NAL data]
-        WS->>Go: [0x02][32B touch payload]
-        Go->>Scrcpy: [32B touch payload] on control socket
+    Go->>Scrcpy: Connect Video Socket (TCP #1)
+    Go->>Scrcpy: Connect Control Socket (TCP #2)
+    Go-->>Browser: Channel 0x04 Metadata [CodecID, Width, Height]
+    
+    par Video Relay
+        loop Video Stream
+            Scrcpy-->>Go: 12B Header [PTS + Flags + Size] + NAL Data
+            Go-->>REC: Tee raw NALs to FFmpeg stdin (Async channel)
+            Go-->>Browser: [0x00][12B Header][NAL Data]
+            Browser->>Browser: WebCodecs VideoDecoder -> Render Canvas
+        end
+    and Control & Clipboard Relay
+        loop Upstream User Actions
+            Browser->>Go: [0x02][Control Message Payload]
+            Go->>Go: Kiosk Filter & Sanitizer (drop unauthorized keys)
+            Go->>Scrcpy: Write to TCP Control Socket
+        end
+        loop Downstream Device Messages
+            Scrcpy-->>Go: [0x00 Clipboard / 0x01 Ack] on Control Socket
+            Go-->>Browser: [0x02][Device Message Payload]
+            Browser->>Browser: Sync to navigator.clipboard
+        end
     end
 ```
 
-#### scrcpy-server Launch Command
-```bash
-adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar \
-    app_process / com.genymobile.scrcpy.Server 2.7 \
-    tunnel_forward=true \
-    video=true \
-    audio=false \
-    control=true \
-    video_codec=h264 \
-    max_size=1080 \
-    max_fps=60 \
-    video_bit_rate=8000000 \
-    send_device_meta=false \
-    send_dummy_byte=false \
-    send_codec_meta=false
-```
+---
 
-> [!NOTE]
-> We disable `send_device_meta`, `send_dummy_byte`, and `send_codec_meta` to simplify the Go relay — the video socket immediately outputs raw H.264 packets with no handshake preamble. Device dimensions are known from the container config (1080×1920).
+### 2. Codec-Agnostic Design & Capability Negotiation
 
-#### Video Socket Packet Format (12-byte header + payload)
+To satisfy **FR-1** ("codec-agnostic, designed to support modern encoders like H.265 or AV1"), scrcpy-server v2.7 supports `video_codec=h264`, `h265`, and `av1`. The 12-byte packet header is invariant across all video codecs:
 
 ```
-┌────────────────────────────────────────────┐
-│          pts_and_flags (8 bytes BE)        │
-│  Bit 63: PACKET_FLAG_CONFIG (SPS/PPS)     │
-│  Bit 62: PACKET_FLAG_KEY_FRAME (IDR)      │
-│  Bits 0-61: PTS in microseconds           │
-├────────────────────────────────────────────┤
-│          packet_size (4 bytes BE)          │
-├────────────────────────────────────────────┤
-│          NAL data (packet_size bytes)      │
-│   Raw H.264 Annex B (with start codes)    │
-└────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                  pts_and_flags (8 bytes BE)                │
+│  Bit 63: PACKET_FLAG_CONFIG (SPS/PPS, VPS, Sequence Header)│
+│  Bit 62: PACKET_FLAG_KEY_FRAME (IDR slice / Key OBU)       │
+│  Bits 0-61: PTS in microseconds                           │
+├────────────────────────────────────────────────────────────┤
+│                  packet_size (4 bytes BE)                  │
+├────────────────────────────────────────────────────────────┤
+│                  Raw Codec Bitstream Data                  │
+│       H.264/H.265: Annex B NALs (00 00 00 01 start code)   │
+│       AV1: Low-overhead OBU sequence                       │
+└────────────────────────────────────────────────────────────┘
 ```
 
-**Keyframe detection** (zero-CPU method): Check `pts_and_flags & (1 << 62)` — no NAL parsing needed.
+#### Negotiation Sequence:
+1. **Client Probe**: During initialization, frontend calls `VideoDecoder.isConfigSupported()` for:
+   - `av01.0.05M.08` (AV1 Main Level 3.1)
+   - `hev1.1.6.L93.B0` (HEVC/H.265 Main Level 3.1)
+   - `avc1.42e01f` (H.264 Constrained Baseline Level 3.1)
+2. **Handshake Query**: Client appends supported list to WebSocket URL: `?codecs=av1,h265,h264`.
+3. **Backend Selection**: `domain.NegotiateCodec(requested, allowed)` matches against container capabilities.
+4. **scrcpy Launch**: Injects `video_codec=<chosen_codec>` into the server launch arguments.
+5. **Metadata Channel (`0x04`)**:
+   ```
+   [0x04 : 1B Channel]
+   [0x01 | 0x02 | 0x03 : 1B Wire Codec ID (1=H264, 2=H265, 3=AV1)]
+   [width : 2B uint16 BE]
+   [height : 2B uint16 BE]
+   ```
+6. **Frontend Codec Factory**: Dynamically assigns the corresponding `CodecHandler` strategy, ensuring zero changes to the underlying WebCodecs frame loop.
 
 ---
 
-### Control Messages (Client → scrcpy-server)
+### 3. D-pad vs. Touch Interaction Model (FR-2 Senior Requirement)
 
-#### INJECT_TOUCH_EVENT — 32 bytes
+#### The Touch Mode Problem:
+Android's `ViewRootImpl` manages `isInTouchMode`. When touch events arrive, Android enters Touch Mode and **strips all focus outlines** from views. In Android TV / Leanback applications (`BrowseSupportFragment`, `VerticalGridView`), clicking with mouse touch coordinates breaks focus and halts navigation.
 
-| Offset | Size | Field | Type | Values |
-|:---|:---|:---|:---|:---|
-| 0 | 1 | `type` | uint8 | `0x02` |
-| 1 | 1 | `action` | uint8 | `0`=DOWN, `1`=UP, `2`=MOVE |
-| 2 | 8 | `pointer_id` | int64 BE | `-1` (mouse), `-2` (finger), `0..N` (multitouch) |
-| 10 | 4 | `x` | int32 BE | Pixel X on device screen |
-| 14 | 4 | `y` | int32 BE | Pixel Y on device screen |
-| 18 | 2 | `width` | uint16 BE | Video frame width (e.g. 1080) |
-| 20 | 2 | `height` | uint16 BE | Video frame height (e.g. 1920) |
-| 22 | 2 | `pressure` | uint16 BE | `0x0000`–`0xFFFF` (0.0–1.0 fixed-point) |
-| 24 | 4 | `action_button` | uint32 BE | `1`=Primary, `2`=Secondary, `0`=None |
-| 28 | 4 | `buttons` | uint32 BE | Currently held button bitmask |
+#### The Solution:
+Provide an explicit **D-pad / Touch Mode Toggle** in the web UI.
 
-#### INJECT_SCROLL_EVENT — 21 bytes
+```mermaid
+stateDiagram-v2
+    [*] --> TouchMode: Default (Mobile Apps)
+    
+    state TouchMode {
+        direction LR
+        CanvasPointer --> INJECT_TOUCH_EVENT: x, y (32B)
+        WheelScroll --> INJECT_SCROLL_EVENT: i16 fixed-point (21B)
+        Keys --> INJECT_KEYCODE: Standard
+    }
+    
+    TouchMode --> DpadMode: User Toggles (Alt+M / UI Button)
+    
+    state DpadMode {
+        direction LR
+        CanvasClick --> KEYCODE_DPAD_CENTER: Key 23 (14B)
+        CanvasSwipe --> KEYCODE_DPAD_DIR: Keys 19-22
+        WheelStep --> KEYCODE_DPAD_DIR: Up/Down
+        VirtualRemote --> KEYCODE_DPAD_DIR: UI Buttons
+        SuppressTouch: Suppress raw INJECT_TOUCH
+    }
+    
+    DpadMode --> TouchMode: User Toggles
+```
 
-| Offset | Size | Field | Type | Values |
-|:---|:---|:---|:---|:---|
-| 0 | 1 | `type` | uint8 | `0x03` |
-| 1 | 4 | `x` | int32 BE | Pointer X position |
-| 5 | 4 | `y` | int32 BE | Pointer Y position |
-| 9 | 2 | `width` | uint16 BE | Video frame width |
-| 11 | 2 | `height` | uint16 BE | Video frame height |
-| 13 | 2 | `hscroll` | **int16 BE** | Horizontal scroll (signed fixed-point) |
-| 15 | 2 | `vscroll` | **int16 BE** | Vertical scroll (signed fixed-point) |
-| 17 | 4 | `buttons` | uint32 BE | Currently held button bitmask |
-
-> [!IMPORTANT]
-> Scroll values are **int16** (2 bytes each), NOT int32. This makes the total **21 bytes**, not 25. Browser `wheel.deltaY` (typically ±120 per tick) must be normalized: `Math.sign(deltaY)` to get ±1 as the scroll unit.
-
-#### INJECT_KEYCODE — 14 bytes
-
-| Offset | Size | Field | Type |
-|:---|:---|:---|:---|
-| 0 | 1 | `type` | uint8 (`0x00`) |
-| 1 | 1 | `action` | uint8 (`0`=DOWN, `1`=UP) |
-| 2 | 4 | `keycode` | uint32 BE (Android `KEYCODE_*`) |
-| 6 | 4 | `repeat` | uint32 BE |
-| 10 | 4 | `metastate` | uint32 BE |
-
-#### SET_CLIPBOARD — 14 + N bytes
-
-| Offset | Size | Field | Type |
-|:---|:---|:---|:---|
-| 0 | 1 | `type` | uint8 (`0x09`) |
-| 1 | 8 | `sequence` | uint64 BE |
-| 9 | 1 | `paste` | uint8 (`1`=paste immediately) |
-| 10 | 4 | `length` | uint32 BE |
-| 14 | N | `text` | UTF-8 bytes |
+- **Android D-pad Keycodes**:
+  - `KEYCODE_DPAD_UP` = 19 (`0x13`)
+  - `KEYCODE_DPAD_DOWN` = 20 (`0x14`)
+  - `KEYCODE_DPAD_LEFT` = 21 (`0x15`)
+  - `KEYCODE_DPAD_RIGHT` = 22 (`0x16`)
+  - `KEYCODE_DPAD_CENTER` = 23 (`0x17`)
+- **Backend Defense-in-Depth**: In D-pad mode, Go `StreamRelay` discards any stray `INJECT_TOUCH_EVENT` packets, ensuring the Android container never flaps into Touch Mode.
 
 ---
 
-### WebCodecs Integration Strategy
+### 4. Two-Way Clipboard Synchronization (BR-3)
 
-Based on research of the WebCodecs API and browser compatibility:
+Uses scrcpy-server's native binary protocol over the control socket (UID 2000 `app_process`), bypassing Android 10+ background clipboard restrictions:
 
-#### Configuration
-```typescript
-// Annex B mode — zero conversion overhead, feed scrcpy NALs directly
-const config: VideoDecoderConfig = {
-  codec: 'avc1.42e01f',  // Constrained Baseline Level 3.1 (scrcpy default)
-  optimizeForLatency: true,  // Disables decoder picture reordering buffer
-  hardwareAcceleration: 'prefer-hardware',
-};
-// No 'description' property needed — SPS/PPS are in-band in Annex B
-```
-
-> [!TIP]
-> **Dynamic codec string**: Extract profile/compat/level from SPS NAL bytes 1-3:
-> `avc1.${sps[1].hex}${sps[2].hex}${sps[3].hex}` — e.g. `avc1.42e01f`
-
-#### Rendering Strategy: Latest-Frame-Wins
-
-```
-Decoder output callback     →  Store frame in pendingFrame ref
-requestAnimationFrame loop  →  Draw pendingFrame, close it
-
-If 3 frames arrive between renders, only the latest is drawn.
-Old frames are closed immediately to release GPU surfaces.
-```
-
-> [!WARNING]
-> **GPU surface exhaustion**: `VideoFrame.close()` is **mandatory**. Browsers allocate 16–32 hardware surfaces. Failing to close causes the decoder to stall within ~300ms.
-
-#### Canvas Setup
-```typescript
-canvas.getContext('2d', { alpha: false, desynchronized: true });
-// desynchronized: true bypasses OS compositor queue, saving ~16ms (one frame)
-```
-
-#### Backpressure Management
-```
-if (decoder.decodeQueueSize > 5) {
-  // Client falling behind — drop delta frames, wait for keyframe
-  waitingForKeyframe = true;
-  return;
-}
-```
-
-#### Browser Compatibility
-
-| Browser | Version | H.264 WebCodecs |
-|:---|:---|:---|
-| Chrome / Edge | 94+ | ✅ Full (Annex B + avcC) |
-| Safari | 16.4+ | ✅ (VideoToolbox HW accel) |
-| Firefox | 130+ | ✅ (Sept 2024+) |
-| Firefox Android | — | ❌ Not supported |
+1. **Host-to-Device (Browser → Android)**:
+   - User triggers native browser paste (`Ctrl+V` / `Cmd+V`) or clicks toolbar Paste.
+   - Client sends Channel `0x02` + `MsgTypeSetClipboard` (`0x09`):
+     ```
+     [0x02 Channel: 1B]
+     [0x09 Type: 1B]
+     [sequence: 8B uint64 BE]
+     [paste: 1B (0x01 = immediate paste)]
+     [length: 4B uint32 BE]
+     [utf-8 text: N bytes]
+     ```
+2. **Device-to-Host (Android → Browser)**:
+   - When text is copied inside Android, `scrcpy-server` detects clipboard change and emits `DEVICE_MSG_TYPE_CLIPBOARD` (`0x00`) over the control TCP socket:
+     ```
+     [0x00 Type: 1B]
+     [length: 4B uint32 BE]
+     [utf-8 text: N bytes]
+     ```
+   - Go backend wraps with `0x02` channel and relays to WebSocket.
+   - Browser client checks `lastLocalClipboardSent` cache (preventing infinite echo loop), then calls `navigator.clipboard.writeText(text)` or shows a 1-click "Copy Remote Text" toast if document lacks transient activation.
 
 ---
 
-### Redroid Container Specifications
+### 5. Kiosk Mode Enforcement (BR-4)
 
-Based on research of redroid documentation and cloud VM compatibility:
+A **3-Tier Defense-in-Depth** model guarantees user isolation to a single app:
 
-#### Kernel Module Setup
+1. **Tier 1: Server-Side Input Gate (Go Relay)**:
+   - Intercepts Channel `0x02` packets in `usecase/stream_usecase.go`.
+   - Discards blocked keycodes: `KEYCODE_HOME` (3), `KEYCODE_APP_SWITCH` (187, Recents), `KEYCODE_POWER` (26), `KEYCODE_SETTINGS` (176), `KEYCODE_SEARCH` (84).
+   - Clamps touch coordinates: suppresses swipes in the top 24px (Notification shade) and bottom 36px (Gesture navigation bar).
+2. **Tier 2: Android Enterprise Lockdown (AOSP)**:
+   - Sets immersive mode: `settings put global policy_control immersive.full=*`.
+   - Disables stock launcher: `pm disable-user --user 0 com.android.launcher3`.
+   - Configures Lock Task Mode (`ActivityOptions.setLockTaskEnabled(true)`) via headless DPC helper.
+3. **Tier 3: Server-Side Activity Guardian (Go Watchdog)**:
+   - Background goroutine polls `dumpsys activity activities` every 750ms.
+   - If `mResumedActivity` deviates from the target package, executes `am force-stop <unauthorized_pkg>` and relaunches target app.
 
-**Ubuntu 22.04** (kernel 5.15):
-```bash
-sudo apt install -y linux-modules-extra-$(uname -r)
-sudo modprobe binder_linux devices="binder,hwbinder,vndbinder"
-sudo modprobe ashmem_linux  # Still available on 5.15
-```
+---
 
-**Ubuntu 24.04** (kernel 6.8):
-```bash
-sudo apt install -y linux-modules-extra-$(uname -r)
-sudo modprobe binder_linux devices="binder,hwbinder,vndbinder"
-# ashmem_linux is REMOVED in kernel 5.18+ — use memfd instead:
-# Pass androidboot.use_memfd=1 to container
-```
+### 6. Automated Session Recording (BR-5)
 
-#### Container Launch (Bridge Networking)
-```bash
-docker run -itd --rm --privileged \
-    -p 127.0.0.1:5555:5555 \
-    redroid/redroid:13.0.0-latest \
-    androidboot.redroid_width=1080 \
-    androidboot.redroid_height=1920 \
-    androidboot.redroid_dpi=420 \
-    androidboot.redroid_fps=60 \
-    androidboot.redroid_gpu_mode=guest \
-    androidboot.use_memfd=1 \
-    ro.setupwizard.mode=DISABLED
-```
+Implements server-side zero-transcode containerization via an asynchronous Go worker:
 
-#### Boot Timing Profile
+- **Non-blocking Stream Tee**: In `usecase/stream_usecase.go`, each `pkt.Data` (Annex B NAL) is enqueued to a buffered channel (`chan []byte`, cap 120 frames). If buffer fills, frames are dropped to protect live stream latency.
+- **FFmpeg Subprocess Pipe**:
+  ```bash
+  ffmpeg -y -f h264 -r 60 -i pipe:0 -c:v copy \
+    -movflags frag_keyframe+empty_moov+default_base_moof \
+    /data/recordings/{session_id}.mp4
+  ```
+- **Crash Resilience**: Fragmented MP4 (`fMP4`) writes self-contained movie fragments (`moof` + `mdat`) at every keyframe. If the container or backend is terminated abruptly, the file is never corrupted and remains 100% playable.
+- **API & Retrieval**: `GET /api/v1/sessions/:id/recording` with HTTP Range header support for browser playback.
 
-| Milestone | Time |
-|:---|:---|
-| TCP port 5555 open | 3–8s |
-| ADB status: `device` | 8–15s |
-| `sys.boot_completed == 1` (first boot) | 30–60s |
-| `sys.boot_completed == 1` (warm boot) | 10–20s |
+---
 
-> [!IMPORTANT]
-> **Cloud VM requirements**: Must be KVM/full virtualization (not OpenVZ/LXC). Software rendering mode (`gpu_mode=guest`) works on headless VMs without GPU. Minimum 2 vCPU + 4GB RAM per container.
+### 7. Pointer Lock, Special Characters & Error-Resilient Demuxing
+
+- **Pointer Lock API**:
+  - `canvas.requestPointerLock({ unadjustedMovement: true })` captures raw `movementX/Y` without OS acceleration.
+  - Maintains a virtual cursor `(vx, vy)` clamped to device dimensions.
+  - Intercepts `Escape`: releases pointer lock while **suppressing `KEYCODE_BACK`** to prevent unwanted Android app exit.
+- **Special Characters (`'`, `&`, Unicode)**:
+  - Uses scrcpy `INJECT_TEXT` (`0x01`): sends UTF-8 byte stream directly to the Java server process.
+  - Completely avoids shell execution (`/bin/sh`), preventing command injection or syntax breakage.
+  - Empty search inputs are guarded client-side (`trim().length > 0`).
+- **Error-Resilient Demultiplexing**:
+  - Validates minimum header length (`>= 13B`) and bounds-checks packet size (`<= 16MB`).
+  - Corrupted packets are dropped without throwing uncaught exceptions.
+  - Decoder crashes trigger automatic recreation of `VideoDecoder` and wait for the next IDR keyframe (`isKeyFrame === true`).
 
 ---
 
@@ -311,442 +305,242 @@ docker run -itd --rm --privileged \
 ```
 android-browser-stream/
 ├── backend/
-│   ├── cmd/server/main.go              # Entry point, bootstrap
+│   ├── cmd/server/main.go                  # Bootstrap, DI wiring, graceful shutdown
 │   ├── domain/
-│   │   ├── session.go                  # Session entity + Repository/Usecase interfaces
-│   │   ├── device.go                   # ContainerConfig, DeviceInfo structs
-│   │   └── errors.go                   # Domain error types + ErrorResponse DTO
+│   │   ├── session.go                      # Session entity, status enums, usecase/repo interfaces
+│   │   ├── device.go                       # ContainerConfig (with Kiosk parameters), DeviceInfo
+│   │   ├── codec.go                        # VideoCodec types (h264, h265, av1), negotiation logic
+│   │   ├── recording.go                    # SessionRecorder, RecorderFactory interfaces
+│   │   └── errors.go                       # Sentinel domain errors + standard ErrorResponse
 │   ├── usecase/
-│   │   ├── session_usecase.go          # Create/Destroy/List sessions, idle cleanup
-│   │   └── stream_usecase.go           # ADB connect → scrcpy start → WS relay loop
+│   │   ├── session_usecase.go              # Session lifecycle, port allocation, idle reaper
+│   │   ├── stream_usecase.go               # WebSocket relay, scrcpy lifecycle, kiosk filter, recorder tee
+│   │   └── kiosk_watchdog.go               # Background ADB activity supervisor
 │   ├── repository/
-│   │   ├── session_repository.go       # SQLite-backed session CRUD
-│   │   └── container_repository.go     # Docker SDK → domain.ContainerRepository
+│   │   ├── session_repository.go           # SQLite session metadata CRUD
+│   │   └── container_repository.go         # Docker SDK container lifecycle
 │   ├── api/
 │   │   ├── controller/
-│   │   │   ├── session_controller.go   # POST/GET/DELETE /api/sessions
-│   │   │   └── stream_controller.go    # GET /api/sessions/:id/stream (WS upgrade)
-│   │   ├── route/router.go             # DI wiring + Gin route registration
-│   │   └── middleware/cors.go
+│   │   │   ├── session_controller.go       # REST CRUD /api/sessions + recording endpoint
+│   │   │   └── stream_controller.go        # WS upgrade /api/sessions/:id/stream + codec query
+│   │   ├── route/router.go                 # Gin routing table & middleware binding
+│   │   └── middleware/cors.go              # CORS headers
 │   ├── infrastructure/
-│   │   ├── adb/client.go              # os/exec wrapper: connect, push, forward, shell
+│   │   ├── adb/client.go                  # os/exec ADB wrapper (connect, forward, shell, dumpsys)
 │   │   ├── scrcpy/
-│   │   │   ├── server.go             # Push JAR, start process, connect sockets
-│   │   │   ├── video.go              # Read 12B header + NAL data from video socket
-│   │   │   └── control.go            # Write touch(32B)/scroll(21B)/key(14B) to control socket
-│   │   ├── portpool/pool.go          # Thread-safe port allocator (sync.Mutex)
-│   │   └── docker/client.go          # Docker SDK: Create, Start, Stop, Remove containers
+│   │   │   ├── server.go                 # scrcpy lifecycle (push JAR, start, connect sockets)
+│   │   │   ├── video.go                  # Read 12B scrcpy header + NAL packets
+│   │   │   └── control.go                # Write touch, scroll, keycode, text, clipboard (BE)
+│   │   ├── recorder/
+│   │   │   └── ffmpeg_recorder.go        # FFmpeg stdin pipe, fMP4 stream copy, buffered worker
+│   │   ├── portpool/pool.go              # Thread-safe port allocator (sync.Mutex)
+│   │   └── docker/client.go              # Docker SDK wrapper implementing ContainerRepository
 │   ├── bootstrap/
-│   │   ├── app.go                     # Application bootstrap + graceful shutdown
-│   │   ├── database.go                # SQLite schema init
-│   │   └── env.go                     # Viper env config loading
-│   ├── bin/scrcpy-server              # scrcpy-server v2.7 JAR (downloaded during setup)
-│   ├── Dockerfile
+│   │   ├── app.go                         # Server lifecycle & context management
+│   │   ├── database.go                    # SQLite schema migration
+│   │   └── env.go                         # Viper environment config
+│   ├── bin/scrcpy-server                  # scrcpy-server v2.7 JAR
+│   ├── Dockerfile                         # Backend container (Alpine + Go + ffmpeg + adb)
 │   ├── go.mod
 │   └── go.sum
 ├── frontend/
 │   ├── src/
-│   │   ├── main.tsx                   # React DOM entry
-│   │   ├── App.tsx                    # Root component with session routing
+│   │   ├── main.tsx                       # React DOM entry
+│   │   ├── App.tsx                        # Router & global state
 │   │   ├── components/
-│   │   │   ├── DeviceCanvas.tsx       # Canvas + WebCodecs + input capture (main viewer)
-│   │   │   ├── SessionManager.tsx     # Session creation/listing dark UI
-│   │   │   ├── LatencyHud.tsx         # Overlay showing measured latency
-│   │   │   ├── ConnectionStatus.tsx   # WebSocket connection indicator
-│   │   │   └── Layout.tsx            # App shell (nav bar, footer, dark canvas)
+│   │   │   ├── DeviceCanvas.tsx           # Canvas viewer + input overlay + virtual controls
+│   │   │   ├── VirtualDpad.tsx            # TV Remote overlay (Up, Down, Left, Right, OK, Back, Home)
+│   │   │   ├── SessionManager.tsx         # Session dashboard & launcher
+│   │   │   ├── LatencyHud.tsx             # Visual Loopback & glass-to-glass stats
+│   │   │   ├── ConnectionStatus.tsx       # WS state, codec badge, bitrate indicator
+│   │   │   └── Layout.tsx                # Framer-style navigation and dark canvas shell
 │   │   ├── hooks/
-│   │   │   ├── useWebSocket.ts       # Binary WS connection + 1-byte channel demux
-│   │   │   ├── useVideoDecoder.ts    # WebCodecs VideoDecoder lifecycle + latest-frame-wins
-│   │   │   ├── useInputCapture.ts    # Mouse/touch/keyboard → binary control payloads
-│   │   │   └── useSession.ts         # REST API client for session CRUD
+│   │   │   ├── useWebSocket.ts           # Resilient binary demux (Channels 0x00..0x04)
+│   │   │   ├── useVideoDecoder.ts        # WebCodecs lifecycle, latest-frame-wins, backpressure
+│   │   │   ├── useInputCapture.ts        # Mouse, touch, D-pad, pointer lock, special keys
+│   │   │   ├── useClipboardSync.ts       # Bidirectional clipboard synchronization
+│   │   │   └── useSession.ts             # Session REST API client
 │   │   ├── lib/
-│   │   │   ├── protocol.ts           # Binary protocol constants + helpers
-│   │   │   ├── nal-parser.ts         # H.264 NAL type detection + SPS extraction
-│   │   │   ├── keymap.ts             # Browser KeyboardEvent.code → Android KEYCODE_*
-│   │   │   └── api.ts               # fetch wrapper for /api/* endpoints
-│   │   ├── types/index.ts            # Shared TypeScript interfaces
-│   │   └── styles/globals.css         # Tailwind directives + Inter/Mona Sans imports
-│   ├── public/
-│   ├── index.html
+│   │   │   ├── codec/
+│   │   │   │   ├── types.ts              # CodecHandler interface
+│   │   │   │   ├── registry.ts           # CodecFactory & browser probing (AV1, H265, H264)
+│   │   │   │   ├── h264.ts               # H.264 Annex B / SPS parser
+│   │   │   │   ├── h265.ts               # H.265 VPS/SPS parser
+│   │   │   │   └── av1.ts                # AV1 OBU Sequence Header parser
+│   │   │   ├── protocol.ts               # Binary packet parsers, bounds validation
+│   │   │   ├── control.ts                # Binary control message builders
+│   │   │   └── keymap.ts                 # KeyboardEvent.code -> Android KEYCODE_* mapping
+│   │   ├── styles/globals.css             # Tailwind tokens & typography
+│   │   └── types/index.ts
 │   ├── vite.config.ts
 │   ├── tailwind.config.ts
-│   ├── tsconfig.json
-│   └── package.json
+│   ├── package.json
+│   └── tsconfig.json
 ├── deploy/
-│   ├── docker-compose.yml             # Dev: Go backend only (redroid managed by Go)
-│   ├── docker-compose.prod.yml        # Prod overlay with Caddy
-│   ├── Caddyfile                      # Auto-HTTPS reverse proxy
-│   └── setup-vm.sh                    # Ubuntu VM provisioning (Docker, ADB, binder, Caddy, Go, Node)
+│   ├── docker-compose.yml                 # Local dev orchestration
+│   ├── docker-compose.prod.yml            # Production overlay (Go + Caddy)
+│   ├── Caddyfile                          # Reverse proxy with automatic Let's Encrypt TLS
+│   └── setup-vm.sh                        # Ubuntu VM provisioner (Docker, ADB, binder, Caddy, ffmpeg)
 ├── docs/
-│   ├── architecture.md                # Architecture write-up (deliverable #5)
-│   ├── what-went-wrong.md             # Post-mortem (deliverable #6)
-│   └── with-more-time.md              # Scaling roadmap (deliverable #7)
+│   ├── architecture.md                    # System architecture write-up (Deliverable #5)
+│   ├── what-went-wrong.md                 # Post-mortem & technical hurdles (Deliverable #6)
+│   └── with-more-time.md                  # Scaling roadmap (Deliverable #7)
 ├── AGENTS.md
 ├── DESIGN.md
 ├── GO-BACKEND-BEST-PRACTICES.md
-├── PROCESS_LOG.md
-└── README.md
+├── PROCESS_LOG.md                         # Append-only AI compliance audit log (Deliverable #8)
+└── README.md                              # Setup, hosting details, limits (Deliverable #4)
 ```
 
 ---
 
-## Proposed Changes: Component Details
-
-### Go Backend — Domain Layer
-
-> Innermost layer. Only imports `context`, `time`, standard library.
-
-#### [NEW] `domain/session.go`
-- `SessionStatus` enum: `creating → ready → streaming → terminating → terminated`
-- `Session` struct: ID, ContainerID, ADBPort, Status, DeviceWidth, DeviceHeight, CreatedAt, LastActiveAt
-- `SessionRepository` interface: Create, GetByID, UpdateStatus, UpdateLastActive, List, Delete, GetStale
-- `ContainerRepository` interface: Create, Stop, Remove, IsRunning
-- `SessionUsecase` interface: CreateSession, GetSession, ListSessions, DestroySession
-- `ErrorResponse` / `SuccessResponse` DTOs
-
-#### [NEW] `domain/device.go`
-- `ContainerConfig` struct: Image, ADBPort, Width, Height, DPI, FPS, GPUMode, MemoryLimit, CPULimit
-- `DeviceInfo` struct: Name, Width, Height, Codec
-
-#### [NEW] `domain/errors.go`
-- Sentinel errors: `ErrSessionNotFound`, `ErrSessionLimit`, `ErrContainerBoot`, `ErrADBConnect`, `ErrScrcpyStart`, `ErrPortExhausted`
-
----
-
-### Go Backend — Infrastructure Layer
-
-> Adapters for external systems. Never imported by domain/ or usecase/.
-
-#### [NEW] `infrastructure/portpool/pool.go`
-- Thread-safe port allocator with `sync.Mutex`
-- `New(startPort, count)` → `Acquire() (int, error)` → `Release(port)`
-- Pool of 3 ports (5555, 5556, 5557) for max 3 concurrent sessions
-
-#### [NEW] `infrastructure/docker/client.go`
-- Wraps `github.com/docker/docker/client`
-- `Create(cfg ContainerConfig)`: builds `container.Config` with redroid boot args, `HostConfig` with privileged + AutoRemove + port bindings + resource limits
-- `Stop(containerID)`, `Remove(containerID)`, `IsRunning(containerID)`
-- Implements `domain.ContainerRepository`
-
-#### [NEW] `infrastructure/adb/client.go`
-- Uses `os/exec` to call `adb` binary
-- `Connect(host, port)`: `adb connect 127.0.0.1:PORT`
-- `WaitForBoot(serial, timeout)`: polls `getprop sys.boot_completed` every 2s
-- `Push(serial, localPath, remotePath)`: push scrcpy-server JAR
-- `Forward(serial, localPort, abstractSocket)`: `adb forward tcp:PORT localabstract:scrcpy`
-- `Shell(serial, args...)`: returns `*exec.Cmd` (non-blocking)
-- `Disconnect(serial)`
-
-#### [NEW] `infrastructure/scrcpy/server.go`
-- `NewServer(adbClient, serial)` → `Start(ctx, binaryPath, videoPort)` → `Close()`
-- Start flow: Push JAR → Shell start server → Forward port → Connect video socket (retry 30x, 200ms intervals) → Connect control socket
-- Exposes `VideoConn()` and `ControlConn()` as `net.Conn`
-
-#### [NEW] `infrastructure/scrcpy/video.go`
-- `ReadVideoPacket(conn) → *VideoPacket`
-- Reads 12-byte header: extracts PTS (bits 0-61), IsConfig (bit 63), IsKeyFrame (bit 62), packet_size
-- Reads `packet_size` bytes of NAL data
-- Returns `VideoPacket{PTS, IsConfig, IsKeyFrame, Data}`
-
-#### [NEW] `infrastructure/scrcpy/control.go`
-- `InjectTouch(conn, action, pointerID, x, y, screenW, screenH, pressure)` — 32 bytes
-- `InjectScroll(conn, x, y, screenW, screenH, hscroll, vscroll)` — 21 bytes
-- `InjectKeycode(conn, action, keycode, repeat, metaState)` — 14 bytes
-- `InjectText(conn, text)` — 5 + len(text) bytes
-- `SetClipboard(conn, sequence, paste, text)` — 14 + len(text) bytes
-- All fields Big-Endian using `encoding/binary`
-
----
-
-### Go Backend — Use Case Layer
-
-> Pure business logic. Depends only on domain interfaces + infrastructure interfaces (via DI).
-
-#### [NEW] `usecase/session_usecase.go`
-- Implements `domain.SessionUsecase`
-- `CreateSession`: Check session limit (max 3) → Acquire port → Create session record → Docker create container → Update status to ready
-- `DestroySession`: Update status → Stop container → Remove container → Release port → Update status terminated
-- `GetSession`, `ListSessions`: Delegates to repository
-- **Idle cleanup goroutine**: Runs every 60s, finds sessions with LastActiveAt older than 5 minutes, destroys them
-- Context timeout managed via `context.WithTimeout(ctx, u.timeout)` + `defer cancel()`
-
-#### [NEW] `usecase/stream_usecase.go`
-- `RelayStream(ctx, session, ws)`: The main streaming orchestration function
-  1. `adb.Connect` + `adb.WaitForBoot` (up to 90s timeout)
-  2. `adb.Push` scrcpy-server JAR
-  3. `adb.Shell` to start scrcpy-server process
-  4. `adb.Forward` TCP port to `localabstract:scrcpy`
-  5. Connect video socket (TCP #1) with retry loop
-  6. Connect control socket (TCP #2)
-  7. Launch 2 goroutines in `sync.WaitGroup`:
-     - **Video relay**: Read `VideoPacket` → prepend `0x00` channel byte → forward header+data to WebSocket
-     - **Control relay**: Read binary WS message → check `channel == 0x02` → forward payload to scrcpy control socket
-  8. Block until either goroutine exits (ctx cancel, WS close, socket error)
-  9. On exit: close scrcpy → trigger session destroy
-
----
-
-### Go Backend — API Layer
-
-> Thin controllers. Parse request → call usecase → format response.
-
-#### [NEW] `api/controller/session_controller.go`
-- `Create(c *gin.Context)`: Call `usecase.CreateSession(c.Request.Context())`, return 201 + session JSON
-- `Get(c *gin.Context)`: Call `usecase.GetSession(ctx, c.Param("id"))`, return 200/404
-- `List(c *gin.Context)`: Return all sessions as JSON array
-- `Delete(c *gin.Context)`: Call `usecase.DestroySession`, return 204
-
-#### [NEW] `api/controller/stream_controller.go`
-- `HandleStream(c *gin.Context)`: Get session → `websocket.Accept(c.Writer, c.Request)` → call `streamUsecase.RelayStream(ctx, session, conn)` → on return, destroy session
-
-#### [NEW] `api/route/router.go`
-- DI wiring: instantiates all infrastructure → repositories → usecases → controllers
-- Routes:
-  - `POST /api/sessions` → Create
-  - `GET /api/sessions` → List
-  - `GET /api/sessions/:id` → Get
-  - `DELETE /api/sessions/:id` → Delete
-  - `GET /api/sessions/:id/stream` → WebSocket upgrade
-  - `GET /api/health` → Health check
-
-#### [NEW] `api/middleware/cors.go`
-- Standard CORS middleware allowing the frontend origin
-
----
-
-### React Frontend
-
-#### [NEW] `hooks/useVideoDecoder.ts`
-- Creates `VideoDecoder` with Annex B config (`avc1.42e01f`, `optimizeForLatency: true`)
-- Output callback: latest-frame-wins pattern via `pendingFrame` ref + `requestAnimationFrame`
-- `feedPacket(data, ptsUs, isKey)`: checks `waitingForKeyframe`, monitors `decodeQueueSize > 5` for backpressure
-- `init()`, `destroy()`, `reset()` lifecycle methods
-- Canvas context: `{ alpha: false, desynchronized: true }`
-
-#### [NEW] `hooks/useWebSocket.ts`
-- Opens binary WebSocket to `/api/sessions/:id/stream`
-- `onmessage`: reads byte 0 as channel, demuxes:
-  - `0x00` (video): Parse 12-byte scrcpy header → extract PTS flags → call `onVideoPacket(data, pts, isKey, isConfig)`
-  - `0x02` (control): Forward to `onControlMessage` callback
-- `sendControl(payload)`: prepends `0x02` channel byte, sends as binary
-- `connect(url)`, `close()` methods
-
-#### [NEW] `hooks/useInputCapture.ts`
-- Captures `mousedown/mousemove/mouseup` on canvas → `normalizeCoords` via `getBoundingClientRect()` → builds 32-byte touch payload → `sendControl()`
-- Captures `wheel` events → builds 21-byte scroll payload (hscroll/vscroll as int16)
-- Captures `keydown/keyup` → maps `KeyboardEvent.code` to Android `KEYCODE_*` → builds 14-byte keycode payload
-- Coordinate normalization: `ratioX = (clientX - rect.left) / rect.width; x = Math.round(ratioX * deviceWidth)`
-- Canvas `tabIndex = 0` for keyboard focus
-
-#### [NEW] `hooks/useSession.ts`
-- REST API client: `createSession()`, `getSession(id)`, `listSessions()`, `deleteSession(id)`
-- Constructs WebSocket URL from session ID
-
-#### [NEW] `components/DeviceCanvas.tsx`
-- Composes `useVideoDecoder` + `useWebSocket` + `useInputCapture`
-- Renders `<canvas>` with `max-h-[85vh]` + aspect ratio constraint
-- Includes `<ConnectionStatus>` and `<LatencyHud>` overlays
-
-#### [NEW] `components/SessionManager.tsx`
-- Landing page: "Start Session" button → calls `createSession()` → navigates to stream view
-- Shows active sessions list with status indicators
-- Dark canvas UI with Framer design tokens
-
-#### [NEW] `components/Layout.tsx`
-- App shell: 56px sticky nav bar on `bg-canvas`, Framer-style footer
-- Responsive: hamburger nav below 810px
-
-#### [NEW] `lib/keymap.ts`
-- Complete mapping of `KeyboardEvent.code` → Android `KeyEvent.KEYCODE_*`
-- Covers: letters, digits, arrows, space, enter, backspace, delete, tab, escape, home, end, F1-F12
-
-#### [NEW] `tailwind.config.ts`
-- Custom theme extending Tailwind with Framer design tokens:
-  - Colors: canvas, surface-1, surface-2, ink, ink-muted, accent-blue, hairline
-  - Fonts: Mona Sans (display), Inter Variable (body)
-  - Spacing: 5px-based scale
-  - Border radius: xs through pill
-  - Breakpoints: 1199px, 810px, 809px
-
----
-
-### Deployment Configuration
-
-#### [NEW] `deploy/docker-compose.yml`
-- Go backend service (built from `backend/Dockerfile`)
-- Mounts `/var/run/docker.sock` for Docker SDK access
-- Mounts `backend/bin/` for scrcpy-server binary
-- Environment: `REDROID_IMAGE`, `ADB_PORT_START`, `MAX_SESSIONS`, `SCRCPY_BIN_PATH`, `IDLE_TIMEOUT`
-
-#### [NEW] `deploy/Caddyfile`
-- Reverse proxy `localhost:8080` for API + WebSocket
-- Serves frontend static files from `/srv/frontend/dist`
-- SPA fallback: `try_files {path} /index.html`
-- Auto-HTTPS via Let's Encrypt when domain is configured
-
-#### [NEW] `deploy/setup-vm.sh`
-- Installs: Docker, ADB (`android-tools-adb`), kernel modules (`binder_linux`), Caddy, Go 1.22+, Node.js 20
-- Loads `binder_linux` with `devices="binder,hwbinder,vndbinder"`
-- On Ubuntu 24.04: skips `ashmem_linux`, relies on `use_memfd=1`
-- Pulls `redroid/redroid:13.0.0-latest`
-- Persists modules across reboots via `/etc/modules`
-
----
-
-## Implementation Phases & Timeline
+## Detailed Implementation Phases & Timeline
 
 ```mermaid
-flowchart LR
-    P1["Phase 1\nScaffolding\n~3h"] --> P2["Phase 2\nContainer\nOrchestration\n~6h"]
-    P2 --> P3["Phase 3\nStreaming\nPipeline\n~10h"]
-    P3 --> P4["Phase 4\nInput\nForwarding\n~5h"]
-    P4 --> P5["Phase 5\nUI & Design\nSystem\n~5h"]
-    P5 --> P6["Phase 6\nLatency &\nPolish\n~4h"]
-    P6 --> P7["Phase 7\nDeploy &\nDocs\n~8h"]
+flowchart TD
+    P1["Phase 1: Project Scaffolding (~3h)"] --> P2["Phase 2: Container & Lifecycle (~6h)\n[BR-1, BR-2, BR-4 Kiosk Model]"]
+    P2 --> P3["Phase 3: Streaming & Recording Pipeline (~10h)\n[CR-1, BR-5 fMP4, Codec Negotiation]"]
+    P3 --> P4["Phase 4: Input & Clipboard System (~6h)\n[CR-2, D-pad Toggle, BR-3, Pointer Lock]"]
+    P4 --> P5["Phase 5: UI & Design System (~4h)\n[Framer Dark UI, TV Remote, HUD]"]
+    P5 --> P6["Phase 6: Latency Benchmarking & Polish (~4h)\n[CR-3 Visual Loopback, Demux Recovery]"]
+    P6 --> P7["Phase 7: Cloud Deploy & Documentation (~8h)\n[CR-4, CR-5 HTTPS, 9 Deliverables]"]
 
-    style P3 fill:#2a2a2a,stroke:#ff6b6b,color:#fff
+    style P3 fill:#1e1e24,stroke:#e63946,stroke-width:2px,color:#fff
+    style P4 fill:#1e1e24,stroke:#457b9d,stroke-width:2px,color:#fff
 ```
 
-### Phase 1: Project Scaffolding (~3h)
-- [ ] Go module init (`go mod init`)
-- [ ] Create full directory structure
-- [ ] Gin HTTP server with `/api/health` endpoint
-- [ ] React + Vite + TypeScript + Tailwind project setup
-- [ ] Tailwind config with Framer design tokens
-- [ ] Docker Compose for dev environment
-- [ ] Download scrcpy-server v2.7 JAR from GitHub releases
-- [ ] Environment config via Viper
+### Phase 1: Scaffolding & Environment Setup (~3h)
+- [ ] Initialize Go 1.22+ module (`go mod init android-browser-stream/backend`).
+- [ ] Scaffold Clean Architecture directory structure (`domain/`, `usecase/`, `repository/`, `api/`, `infrastructure/`).
+- [ ] Download verified `scrcpy-server` v2.7 JAR into `backend/bin/`.
+- [ ] Configure `backend/Dockerfile` with Alpine, Go 1.22, `ffmpeg`, and `android-tools-adb`.
+- [ ] Setup React 18 + Vite + TypeScript frontend with Tailwind CSS and Framer design tokens.
+- [ ] Create `deploy/docker-compose.yml` mounting `/var/run/docker.sock`.
 
-### Phase 2: Container Orchestration (~6h) → BR-1 + BR-2
-- [ ] `infrastructure/portpool` — port allocation
-- [ ] `infrastructure/docker` — Docker SDK wrapper
-- [ ] `domain/session.go` — entity + interfaces
-- [ ] `repository/session_repository.go` — SQLite CRUD
-- [ ] `usecase/session_usecase.go` — session lifecycle + idle cleanup goroutine
-- [ ] `api/controller/session_controller.go` — REST endpoints
-- [ ] `api/route/router.go` — DI wiring
-- [ ] **Test**: `POST /api/sessions` creates a redroid container, `DELETE` destroys it
+### Phase 2: Container Orchestration & Lifecycle (~6h) → BR-1, BR-2, BR-4
+- [ ] Implement thread-safe `infrastructure/portpool/pool.go` (ports 5555–5557).
+- [ ] Implement `infrastructure/docker/client.go` with redroid container config (`privileged`, `gpu_mode=guest`, `use_memfd=1`, `ro.setupwizard.mode=DISABLED`).
+- [ ] Implement SQLite session repository (`repository/session_repository.go`).
+- [ ] Implement `usecase/session_usecase.go`:
+  - `CreateSession`: Port acquisition, Docker container creation, state persistence.
+  - `DestroySession`: Container termination, port release, ephemeral cleanup.
+  - Background reaper goroutine for idle sessions (>15 min inactive).
+- [ ] Add Kiosk parameters to `domain.ContainerConfig` (`kiosk_enabled`, `target_package`, `target_activity`).
+- [ ] Implement `usecase/kiosk_watchdog.go`: periodic ADB activity inspection and auto-relaunch.
 
-### Phase 3: Streaming Pipeline (~10h) → CR-1 ⚠️ Hardest Phase
-- [ ] `infrastructure/adb/client.go` — ADB command wrapper
-- [ ] `infrastructure/scrcpy/server.go` — scrcpy lifecycle
-- [ ] `infrastructure/scrcpy/video.go` — H.264 packet reader
-- [ ] `infrastructure/scrcpy/control.go` — control message writer
-- [ ] `usecase/stream_usecase.go` — bidirectional relay
-- [ ] `api/controller/stream_controller.go` — WebSocket upgrade
-- [ ] `hooks/useWebSocket.ts` — binary WS + demux
-- [ ] `hooks/useVideoDecoder.ts` — WebCodecs + canvas render
-- [ ] `components/DeviceCanvas.tsx` — compose hooks
-- [ ] **Test**: Open browser → see live Android home screen updating
+### Phase 3: Streaming Pipeline & Session Recording (~10h) → CR-1, BR-5
+- [ ] Implement `infrastructure/adb/client.go`: `Connect`, `WaitForBoot`, `Push`, `Forward`, `Shell`.
+- [ ] Implement `infrastructure/scrcpy/server.go`: JAR push, process execution, socket retry loops.
+- [ ] Implement `infrastructure/scrcpy/video.go`: 12-byte header parsing (PTS, config/key flags, packet size).
+- [ ] Implement `infrastructure/recorder/ffmpeg_recorder.go`: Non-blocking buffered channel writing Annex B NALs to `ffmpeg -c:v copy -movflags frag_keyframe+empty_moov+default_base_moof`.
+- [ ] Implement `usecase/stream_usecase.go`: Full bidirectional WebSocket relay, metadata channel `0x04`, stream teeing to recorder.
+- [ ] Implement Codec Negotiation in `domain/codec.go` and `StreamController`.
+- [ ] Frontend: Implement `lib/codec/` (H.264, H.265, AV1 handlers) and `useVideoDecoder.ts` (Annex B ingestion, latest-frame-wins, desynchronized canvas).
 
-### Phase 4: Input Forwarding (~5h) → CR-2
-- [ ] `hooks/useInputCapture.ts` — mouse/touch/keyboard/scroll
-- [ ] `lib/keymap.ts` — KeyboardEvent.code → Android KEYCODE
-- [ ] `lib/protocol.ts` — binary payload builders
-- [ ] Coordinate normalization via `getBoundingClientRect()`
-- [ ] **Test**: Click on Android elements → correct interaction; type in search bar → text appears; scroll → page scrolls
+### Phase 4: Input, D-pad Toggle & Clipboard (~6h) → CR-2, BR-3, Senior Best Practices
+- [ ] Implement `infrastructure/scrcpy/control.go`: `WriteTouch` (32B), `WriteScroll` (21B i16), `WriteKeycode` (14B), `WriteText` (UTF-8), `WriteSetClipboard` (0x09).
+- [ ] Backend Kiosk Filter: In `stream_usecase.go`, filter Channel `0x02` to drop `KEYCODE_HOME` (3), `KEYCODE_APP_SWITCH` (187), `KEYCODE_POWER` (26) and edge swipes.
+- [ ] Implement Device Message Reader: Read `DEVICE_MSG_TYPE_CLIPBOARD` (0x00) from scrcpy control socket and push to WS Channel `0x02`.
+- [ ] Frontend `useInputCapture.ts`:
+  - Normalized coordinates via `getBoundingClientRect()`.
+  - **D-pad Mode Switch**: Suppress raw touch; map gestures/clicks to `KEYCODE_DPAD_*` (19–23).
+  - **Pointer Lock Mode**: `requestPointerLock()`, virtual cursor state machine, `Escape` key suppression.
+  - **Special Characters**: `sendText(str)` via scrcpy `INJECT_TEXT` (0x01); guard against empty search inputs.
+- [ ] Frontend `useClipboardSync.ts`: Two-way clipboard synchronization with echo suppression and toast alerts.
 
-### Phase 5: UI & Design System (~5h)
-- [ ] Framer dark theme implementation (colors, typography, spacing)
-- [ ] Inter Variable + Mona Sans font loading
-- [ ] `SessionManager.tsx` — session creation landing page
-- [ ] `Layout.tsx` — app shell with nav/footer
-- [ ] `ConnectionStatus.tsx` — WS state indicator
-- [ ] Responsive layout (810px breakpoint)
-- [ ] **Test**: UI looks polished, responsive, matches Framer dark aesthetic
+### Phase 5: UI & Design System (~4h)
+- [ ] Implement dark canvas layout matching `DESIGN.md` (Inter Variable, Mona Sans, custom borders).
+- [ ] Build `VirtualDpad.tsx`: Directional pad, OK, Back, Home, and Mode Toggle pill switch.
+- [ ] Build `SessionManager.tsx`: Active sessions list, quick launch button, recording playback links.
+- [ ] Build `ConnectionStatus.tsx`: Real-time WebSocket state, negotiated codec badge, FPS counter.
 
-### Phase 6: Latency Measurement & Polish (~4h) → CR-3
-- [ ] Install millisecond clock app on redroid (or use `date +%s%3N` in terminal)
-- [ ] `LatencyHud.tsx` — frame timing overlay
-- [ ] Visual loopback test: capture timestamp in Android vs browser render
-- [ ] Document methodology and results in `docs/architecture.md`
-- [ ] Edge cases: window resize handling, WebSocket reconnect, decoder error recovery
-- [ ] **Test**: Quantitative latency number documented
+### Phase 6: Latency Benchmarking & Polish (~4h) → CR-3
+- [ ] Implement Android millisecond clock display script / app.
+- [ ] Implement `LatencyHud.tsx` overlay calculating action-to-render roundtrip time.
+- [ ] Conduct standardized **Visual Loopback Test**: Photograph physical screen comparing Android clock vs. rendered canvas frame.
+- [ ] Resilient Demuxing: Enforce 16MB bounds checks in `protocol.ts` and auto-recreate `VideoDecoder` on hardware errors.
 
-### Phase 7: Deployment & Documentation (~8h) → CR-4 + CR-5
-- [ ] Provision Cloud VM (4 vCPU, 8GB RAM)
-- [ ] Run `setup-vm.sh`
-- [ ] Configure Caddy with domain → auto HTTPS
-- [ ] Deploy Go binary + frontend dist
-- [ ] Verify public URL works from external network
-- [ ] Write `README.md` (setup steps, feature guide, limits)
-- [ ] Write `docs/architecture.md` (streaming pipeline, input injection, isolation)
-- [ ] Write `docs/what-went-wrong.md` (dead ends, failures)
-- [ ] Write `docs/with-more-time.md` (scaling, security)
-- [ ] Record 3–5 min demo video on live deployed system
-- [ ] Human vs AI decision summary section
-
-**Total estimated: ~41h** with ~31h buffer for debugging, dead ends, and iteration.
+### Phase 7: Deployment, Verification & Documentation (~8h) → CR-4, CR-5
+- [ ] Provision Cloud VM with KVM virtualization (Ubuntu 22.04 or 24.04).
+- [ ] Execute `deploy/setup-vm.sh`: load `binder_linux`, install Docker, Caddy, ADB, and dependencies.
+- [ ] Configure Caddyfile with public domain → automatic Let's Encrypt HTTPS.
+- [ ] Execute full verification suite (`go test -race`, `tsc --noEmit`, end-to-end stream test).
+- [ ] Record 3–5 minute unedited narrated demo video demonstrating live stream, touch, D-pad, and clipboard.
+- [ ] Author documentation:
+  - `README.md`: Architecture overview, setup steps, known limits.
+  - `docs/architecture.md`: Data flow, protocol specs, codec negotiation.
+  - `docs/what-went-wrong.md`: Post-mortem of technical dead-ends and hurdles.
+  - `docs/with-more-time.md`: Roadmap for Kubernetes orchestration, WebRTC upgrade, and enterprise auth.
+  - `PROCESS_LOG.md`: Finalize chronological AI prompt log, pivot analysis, and human vs. AI matrix.
 
 ---
 
-## Deliverables Matrix
+## Mandatory Deliverables Checklist
 
-| # | Deliverable | Source |
-|:--|:---|:---|
-| 1 | Public Git repository | This repo with full commit history |
-| 2 | Deployed public HTTPS link | Cloud VM + Caddy (Phase 7) |
-| 3 | Narrated demo video (3–5 min) | Record on live deployment (Phase 7) |
-| 4 | README.md | Setup steps, feature guide, hosting, limits (Phase 7) |
-| 5 | Architecture write-up | `docs/architecture.md` (Phase 7) |
-| 6 | "What Went Wrong" post-mortem | `docs/what-went-wrong.md` (Phase 7) |
-| 7 | "With More Time" roadmap | `docs/with-more-time.md` (Phase 7) |
-| 8 | AI audit record | `PROCESS_LOG.md` (maintained throughout) |
-| 9 | Human vs AI decision summary | Section in architecture doc (Phase 7) |
-
----
-
-## User Review Required
-
-> [!IMPORTANT]
-> **Cloud VM**: You need a 4-vCPU / 8GB RAM Cloud VM with **KVM/full virtualization** (not OpenVZ). Recommended: **Hetzner CX41** (~€15/mo) or **DigitalOcean Premium Droplet** ($48/mo). `setup-vm.sh` handles all software.
-
-> [!IMPORTANT]
-> **Domain Name**: Caddy needs a domain pointing to the VM IP for automatic HTTPS (e.g., `stream.yourdomain.com`). Alternative: Cloudflare Tunnel for zero-domain deployment.
-
-> [!IMPORTANT]
-> **scrcpy-server binary**: Downloaded from [scrcpy GitHub releases v2.7](https://github.com/Genymobile/scrcpy/releases/tag/v2.7) — a ~50KB JAR file. I'll download it during Phase 1 scaffolding.
+| # | Deliverable | Target Location | Description |
+|:--|:---|:---|:---|
+| 1 | **Public Git Repository** | GitHub | Complete source code, modular structure, clean commit history. |
+| 2 | **Deployed Public HTTPS Link** | `https://stream.<domain>` | Live Cloud VM deployment accessible over public HTTPS. |
+| 3 | **Narrated Demo Video** | YouTube / Loom / MP4 | 3–5 minutes unedited demonstrating live streaming, D-pad toggle, latency HUD, clipboard, and recording. |
+| 4 | **Project README.md** | `/README.md` | Single-command setup, architecture summary, cloud host details, documented limits. |
+| 5 | **Architecture Write-Up** | `/docs/architecture.md` | In-depth technical breakdown of data flow, binary framing, WebCodecs pipeline, and isolation. |
+| 6 | **"What Went Wrong" Post-Mortem**| `/docs/what-went-wrong.md` | Detailed analysis of engineering hurdles, dead ends, and lessons learned. |
+| 7 | **"With More Time" Roadmap** | `/docs/with-more-time.md` | Enterprise scaling roadmap: WebRTC migration, K8s orchestration, GPU acceleration. |
+| 8 | **AI Compliance Log** | `/PROCESS_LOG.md` | Chronological append-only audit trail of verbatim AI prompts and decisions. |
+| 9 | **Human vs. AI Decision Summary** | `/docs/architecture.md` & `PROCESS_LOG.md` | Section detailing human critical architectural pivots vs. AI boilerplate. |
 
 ---
 
-## Open Questions
+## AI Compliance & Pivot Decision Tracking Template
 
-> [!IMPORTANT]
-> **1. Additional bonus features?** BR-1 (isolation) and BR-2 (lifecycle) are built into the architecture. Want to attempt BR-3 (clipboard), BR-4 (kiosk), or BR-5 (recording)?
+To satisfy the **25% AI Compliance & Audit Trail** weighting, all architectural divergences from AI recommendations must be documented in `PROCESS_LOG.md` using the following schema:
 
-> [!IMPORTANT]
-> **2. Cloud provider preference?** This affects `setup-vm.sh` and deployment scripts.
-
-> [!IMPORTANT]
-> **3. Time remaining?** How many hours remain in the 72-hour deadline?
+```markdown
+### Pivot Decision Log: [Short Title]
+- **Timestamp:** YYYY-MM-DDTHH:MM:SSZ
+- **Suboptimal AI Proposal:** [Describe the flawed architecture suggested by AI, e.g. using `STFService.apk` or WASM decoders]
+- **Architectural Why / Failure Mode:** [Explain why the proposal fails in production, e.g. Android 10+ background clipboard restrictions, high latency]
+- **Selected Senior Architecture:** [Describe the superior approach adopted, e.g. scrcpy native control protocol via `app_process`]
+- **Human Engineering Value-Add:** [Detail the specific custom design, protocol framing, or boundary enforcement implemented]
+```
 
 ---
 
-## Verification Plan
+## Verification & Testing Plan
 
-### Automated Tests
+### Automated Test Suite
 ```bash
-# Backend: all tests with race detector
+# 1. Backend tests with Go data race detector
 cd backend && go test -v -race ./...
 
-# Backend: vet + format
+# 2. Go code formatting and static analysis
 cd backend && go vet ./... && test -z "$(gofmt -l .)"
 
-# Frontend: TypeScript type check
+# 3. Frontend TypeScript compilation check
 cd frontend && npx tsc --noEmit
 
-# Frontend: lint
-cd frontend && npx eslint src/
+# 4. Frontend ESLint validation
+cd frontend && npm run lint
 ```
 
-### Manual Verification
+### Manual Acceptance Test Scenarios
 
-| Requirement | Verification Steps |
-|:---|:---|
-| **CR-1** | Open browser → create session → Android home screen appears, animates without manual refresh |
-| **CR-2** | Click Android UI → correct element activates; type text → appears in search bar; scroll → page scrolls; resize browser → coordinates still accurate |
-| **CR-3** | Run clock app on Android → compare displayed time vs browser canvas timestamp → report delta in ms |
-| **CR-4** | Fresh VM → `setup-vm.sh` → `docker-compose up` → stream works end-to-end |
-| **CR-5** | Open `https://your-domain.com` from different network → create session → stream and input work |
-| **BR-1** | Open 2 browser tabs → each gets different Android instance → actions don't cross-contaminate |
-| **BR-2** | Create session → close tab → `docker ps` shows container gone → port released |
+1. **Continuous Real-Time Streaming (CR-1)**:
+   - Connect browser client; verify Android home screen animates smoothly at >= 30 FPS without manual refresh.
+   - Verify codec negotiation badge displays correct active codec (e.g. `H264` or `AV1`).
+2. **Normalized Input & D-pad Toggle (CR-2)**:
+   - Touch Mode: Tap, swipe, and scroll on Android settings; verify responsive tracking.
+   - D-pad Mode: Switch to D-pad toggle; verify on-screen virtual remote and keyboard arrow keys highlight views with focus rings without entering Touch Mode.
+3. **Visual Loopback Latency Benchmark (CR-3)**:
+   - Run millisecond timer inside Android container; observe Latency HUD and calculate action-to-render delta (Target: <= 100ms p50).
+4. **Isolated Instance per User (BR-1)**:
+   - Open two independent browser sessions; verify each connects to a distinct `redroid` container with separate ADB ports and isolated state.
+5. **Two-Way Clipboard Synchronization (BR-3)**:
+   - Copy text on computer, press `Ctrl+V` on canvas; verify text appears in Android input field.
+   - Copy text in Android; verify toast notification and clipboard update in local browser.
+6. **Kiosk Mode Enforcement (BR-4)**:
+   - Attempt to press Home key, Recents key, or drag notification shade; verify server-side Go filter blocks the actions and container remains locked to the target app.
+7. **Automated Session Recording (BR-5)**:
+   - Conduct 30-second streaming session; terminate session; verify `/data/recordings/<session_id>.mp4` is generated, playable, and uncorrupted.
+8. **Public HTTPS Deployment (CR-5)**:
+   - Load `https://<public-domain>` from an external cellular network; verify WebCodecs initializes in Secure Context without error.

@@ -9,8 +9,9 @@ type ContainerConfig struct {
 	DPI         int
 	FPS         int
 	GPUMode     string
-	MemoryLimit int64
-	CPULimit    int64
+	MemoryLimit  int64
+	CPULimit     int64
+	KioskEnabled bool
 }
 
 // DeviceInfo represents hardware characteristics reported by Android.

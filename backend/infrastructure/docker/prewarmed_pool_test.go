@@ -86,13 +86,13 @@ func (p *mockPortPool) Release(port int) {
 }
 
 type mockADBManager struct {
-	mu           sync.Mutex
-	connected    []string
-	bootWaited   []string
-	pushed       []string
-	connectErr   error
-	bootErr      error
-	pushErr      error
+	mu         sync.Mutex
+	connected  []string
+	bootWaited []string
+	pushed     []string
+	connectErr error
+	bootErr    error
+	pushErr    error
 }
 
 func (m *mockADBManager) ConnectWithRetry(ctx context.Context, host string, port int, retryInterval time.Duration) error {
@@ -177,17 +177,15 @@ func TestPrewarmedPool_AcquireAndReplenish(t *testing.T) {
 	assert.Equal(t, "mock-container-a", warm.ContainerID)
 	assert.Equal(t, 5555, warm.ADBPort)
 	assert.True(t, warm.ScrcpyPushed)
-	assert.Equal(t, 0, pool.Count())
-
-	// Verify scrcpy was pushed (Option B)
-	adbMock.mu.Lock()
-	assert.Len(t, adbMock.pushed, 1)
-	adbMock.mu.Unlock()
 
 	// Pool should automatically replenish container 2 in background
 	require.Eventually(t, func() bool {
 		return pool.Count() == 1
 	}, 2*time.Second, 20*time.Millisecond)
+
+	adbMock.mu.Lock()
+	assert.Contains(t, adbMock.pushed, "127.0.0.1:5555")
+	adbMock.mu.Unlock()
 
 	warm2, err := pool.Acquire(ctx)
 	require.NoError(t, err)

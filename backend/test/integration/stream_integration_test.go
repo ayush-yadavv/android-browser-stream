@@ -69,10 +69,10 @@ func (c *IntegratedFakeContainerRepo) IsRunning(ctx context.Context, containerID
 }
 
 type mockStreamUsecase struct {
-	relayFunc func(ctx context.Context, session *domain.Session, ws *websocket.Conn) error
+	relayFunc func(ctx context.Context, session *domain.Session, ws domain.WebSocketConn) error
 }
 
-func (m *mockStreamUsecase) RelaySession(ctx context.Context, session *domain.Session, ws *websocket.Conn) error {
+func (m *mockStreamUsecase) RelaySession(ctx context.Context, session *domain.Session, ws domain.WebSocketConn, requestedCodecs ...string) error {
 	return m.relayFunc(ctx, session, ws)
 }
 
@@ -128,7 +128,7 @@ func setupIntegrationServer(t *testing.T, maxSessions int) *TestHarness {
 	streamRelay := usecase.NewStreamRelay()
 
 	mockStreamUC := &mockStreamUsecase{
-		relayFunc: func(ctx context.Context, session *domain.Session, ws *websocket.Conn) error {
+		relayFunc: func(ctx context.Context, session *domain.Session, ws domain.WebSocketConn) error {
 			_ = sessionRepo.UpdateStatus(ctx, session.ID, domain.SessionStatusStreaming)
 			return streamRelay.Relay(ctx, videoOut, controlOut, ws)
 		},

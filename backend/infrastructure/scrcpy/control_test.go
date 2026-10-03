@@ -94,4 +94,3 @@ func TestBuildSetClipboardPayload_Layout(t *testing.T) {
 	assert.Equal(t, uint32(len([]byte(text))), binary.BigEndian.Uint32(data[10:14]))
 	assert.Equal(t, text, string(data[14:]))
 }
-
