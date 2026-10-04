@@ -4,7 +4,7 @@
 [![CI Frontend](https://img.shields.io/badge/Frontend-62%20Tests%20Passing%20(9%20Suites)-brightgreen?style=flat-square&logo=vite)](https://vitejs.dev/)
 [![Live App](https://img.shields.io/badge/Live%20App-droidcanvas.ay7.me-blueviolet?style=flat-square&logo=caddy)](https://droidcanvas.ay7.me)
 [![Latency](https://img.shields.io/badge/Glass--to--Glass%20Latency-~35--48ms%20(p50)-blue?style=flat-square)](docs/architecture.md#7-latency-profiling--measurement-methodology-cr-3)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange?style=flat-square)](LICENSE)
 
 An ultra-low-latency, interactive Android-in-Cloud (AIC) streaming engine that executes ephemeral Android 13 containers and streams interactive H.264 video directly to modern web browsers via WebCodecs at sub-50ms glass-to-glass latency with zero server-side transcode overhead.
 
