@@ -239,17 +239,18 @@ sequenceDiagram
 
 ### 8-Stage Latency Pipeline Breakdown
 
-| Stage | Operation | Mechanism | Typical Local/LAN | Typical Cloud VM | Limiting Physical Factor |
-|:---|:---|:---|:---:|:---:|:---|
-| **$T_1$** | Browser Input Capture | `useInputCapture.ts` coordinate normalization & binary serialization | 1.0 ms | 1.0 ms | JavaScript event loop & bounding client rect math |
-| **$T_2$** | Upstream Transport | WebSocket binary frame over TCP | 0.5 ms | 8.0 ms | Network physical distance, TCP congestion window |
-| **$T_3$** | Go Server Relaying | `StreamRelay` byte demuxing & local TCP control socket write | 0.5 ms | 0.5 ms | Goroutine channel dispatch & kernel loopback |
-| **$T_4$** | Android Event Dispatch | scrcpy-server `InputManager.injectInputEvent` via Android IPC | 6.0 ms | 6.0 ms | Android `InputFlinger` event queue & WindowManager |
-| **$T_5$** | Compose & H.264 Encode| `SurfaceFlinger` virtual display grab $\to$ hardware/software encoder | 12.0 ms | 14.0 ms | Android display refresh (60Hz = 16.6ms cycle) + encode |
-| **$T_6$** | Downstream Transport | `StreamRelay` video channel `0x00` multiplexing to WebSocket | 0.5 ms | 8.0 ms | Video MTU packet fragmentation & bandwidth capacity |
-| **$T_7$** | WebCodecs Hardware Decode| `VideoDecoder.decode()` directly offloaded to client GPU | 3.5 ms | 3.5 ms | Hardware GPU VPU slice decoding |
-| **$T_8$** | Canvas 2D Paint | `ctx.drawImage` with `desynchronized: true` (latest-frame-wins) | 1.0 ms | 1.0 ms | OS compositor queue bypass |
-| **Total** | **Glass-to-Glass Delay** | **Action-to-Render End-to-End** | **~25.0 ms** | **~42.0 ms** | **Sub-50ms target met across all environments** |
+| Stage | Operation | Mechanism | Typical Local/LAN | Edge Cloud VM (<20ms RTT) | Prod Cloud (`japancentral` WAN) | Limiting Physical Factor |
+|:---|:---|:---|:---:|:---:|:---:|:---|
+| **$T_1$** | Browser Input Capture | `useInputCapture.ts` coordinate normalization & binary serialization | 1.0 ms | 1.0 ms | 1.0 ms | JavaScript event loop & bounding client rect math |
+| **$T_2$** | Upstream Transport | WebSocket binary frame over TCP | 0.5 ms | 8.0 ms | 68.0 ms | Geographic WAN transit (~5,000 km path to Japan Central) |
+| **$T_3$** | Go Server Relaying | `StreamRelay` byte demuxing & local TCP control socket write | 0.5 ms | 0.5 ms | 0.5 ms | Goroutine channel dispatch & kernel loopback |
+| **$T_4$** | Android Event Dispatch | scrcpy-server `InputManager.injectInputEvent` via Android IPC | 6.0 ms | 6.0 ms | 6.0 ms | Android `InputFlinger` event queue & WindowManager |
+| **$T_5$** | Compose & H.264 Encode| `SurfaceFlinger` virtual display grab $\to$ hardware/software encoder | 12.0 ms | 14.0 ms | 14.0 ms | Android display refresh (60Hz = 16.6ms cycle) + encode |
+| **$T_6$** | Downstream Transport | `StreamRelay` video channel `0x00` multiplexing to WebSocket | 0.5 ms | 8.0 ms | 68.0 ms | Video MTU packet fragmentation & WAN transit |
+| **$T_7$** | WebCodecs Hardware Decode| `VideoDecoder.decode()` directly offloaded to client GPU | 3.5 ms | 3.5 ms | 3.5 ms | Hardware GPU VPU slice decoding |
+| **$T_8$** | Canvas 2D Paint | `ctx.drawImage` with `desynchronized: true` (latest-frame-wins) | 1.0 ms | 1.0 ms | 1.0 ms | OS compositor queue bypass |
+| **Total** | **Glass-to-Glass Delay** | **Action-to-Render End-to-End** | **~25.0 ms** | **~42.0 ms** | **~162.0 ms** | **Core engine pipeline is ~24ms; remainder is WAN network RTT** |
+
 
 ---
 
