@@ -30,7 +30,7 @@ Engineered adhering strictly to **Clean Architecture**, **SOLID principles**, an
 |:---:|:---|:---|:---|
 | **#1** | **Repository & Source Code** | Modular Clean Architecture in Go & TypeScript (`android-browser-stream`). | [GitHub Root](.) |
 | **#2** | **Cloud Deployment Architecture** | Live Cloud VM deployment accessible over public HTTPS/WSS with Caddy reverse proxy. | [`docs/deployment-guide.md`](docs/deployment-guide.md) |
-| **#3** | **Demo Video & System Walkthrough** | 3–5 minute unedited single-take narrated video director's guide & cue script. | [`docs/demo-video-guide.md`](docs/demo-video-guide.md) |
+| **#3** | **Demo Video & System Walkthrough** | 3–5 minute unedited single-take narrated live demonstration ([Director's Script](docs/demo-video-guide.md)). | [YouTube (`rk-ZqgCHtfs`)](https://youtu.be/rk-ZqgCHtfs) |
 | **#4** | **Platform README** | Complete local setup, architecture summary, cloud hosting limits, and feature test guide. | This Document |
 | **#5** | **System Architecture Deep Dive** | Technical design of data flow, WebCodecs pipeline, scrcpy binary protocol, and rejected alternatives. | [`docs/architecture.md`](docs/architecture.md) |
 | **#6** | **Engineering Post-Mortem & Incident Analysis** | Engineering post-mortem detailing dead ends, kernel module incompatibilities, race conditions, and fixes. | [`docs/what-went-wrong.md`](docs/what-went-wrong.md) |

@@ -3,6 +3,8 @@
 > **Mandatory Assignment Requirement:**
 > *"A live demo video of 3 to 5 minutes. Record the deployed version in use, not a mock-up. Show the device responding in real time, walk through each feature you built, and narrate what you are doing. It should be one continuous recording, without cuts, so we can see the real behaviour."*
 
+> 🎬 **Watch the Recorded Live Demo Video (YouTube):** [**https://youtu.be/rk-ZqgCHtfs**](https://youtu.be/rk-ZqgCHtfs)
+
 This document provides the complete director's guide, pre-flight technical checklist, and minute-by-minute cue script for recording the unedited single-take demo video on the deployed Cloud VM.
 
 ---
