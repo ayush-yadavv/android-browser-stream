@@ -16,7 +16,7 @@ NC='\033[0m'
 
 # Configuration Defaults (Customizable via CLI or ENV)
 RESOURCE_GROUP="${RESOURCE_GROUP:-droidcanvas-rg}"
-LOCATION="${LOCATION:-koreacentral}"
+LOCATION="${LOCATION:-japancentral}"
 VM_NAME="${VM_NAME:-droidcanvas-vm}"
 VM_SIZE="${VM_SIZE:-Standard_B2s_v2}" # 2 vCPUs, 8 GB RAM (Permitted in subscription policy & quota)
 IMAGE="${IMAGE:-Canonical:ubuntu-24_04-lts:server:latest}"

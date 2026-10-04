@@ -2,6 +2,10 @@
 
 This document provides a production guide for deploying and operating **DroidCanvas** on public cloud virtual machines.
 
+> 🌐 **Live Production Instance:** [**https://droidcanvas.ay7.me**](https://droidcanvas.ay7.me)  
+> Active cloud deployment provisioned on Microsoft Azure (`Standard_B2s_v2`, 2 vCPU, 8GB RAM, `japancentral`) with automatic Let's Encrypt TLS, HTTP/3, and Caddy reverse proxy.
+
+
 ---
 
 ## 1. Cloud Host Requirements & Provider Matrix

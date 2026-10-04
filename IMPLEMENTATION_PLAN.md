@@ -635,7 +635,7 @@ flowchart TD
 | # | Deliverable | Target Location | Description & Acceptance Criteria |
 | :---: | :--- | :--- | :--- |
 | **1** | **Public Git Repository** | GitHub | Complete backend and frontend source code, automated scripts, clean commit history. |
-| **2** | **Deployed Public Link** | `https://<domain>` | Live HTTPS/WSS URL accessible on Cloud VM without special client installation. |
+| **2** | **Deployed Public Link** | [`https://droidcanvas.ay7.me`](https://droidcanvas.ay7.me) | Live HTTPS/WSS URL accessible on Cloud VM without special client installation. |
 | **3** | **Narrated Demo Video** | [YouTube Video](https://youtu.be/rk-ZqgCHtfs) | 3–5 minutes, **one continuous take without cuts**, recorded on **live deployed Cloud VM** (no mock-ups), walking through each feature with voice narration. |
 | **4** | **Project README.md** | `/README.md` | Single-command setup, architecture overview, hosting provider/region, server limits (max 3 concurrent sessions), and test instructions for each feature. |
 | **5** | **Architecture Write-Up** | `/docs/architecture.md` | 1–2 pages detailing data flow, protocol specifications, codec negotiation, and **a dedicated section on architectural alternatives considered and rejected**. |
