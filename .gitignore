@@ -11,6 +11,7 @@ build/
 
 # Media & Session Recordings
 *.mp4
+!docs/**/*.mp4
 *.mkv
 *.webm
 *.avi

@@ -38,6 +38,9 @@ Engineered adhering strictly to **Clean Architecture**, **SOLID principles**, an
 | **#8** | **Engineering Process Log & Audit Trail** | Prompt-by-prompt append-only audit trail recording development history and verification steps. | [`PROCESS_LOG.md`](PROCESS_LOG.md) |
 | **#9** | **Engineering Decisions & Trade-Offs** | Technical trade-off analysis, autonomous decisions, and AI pair-programming reflection. | [`docs/architecture.md#8-engineering-decisions-trade-offs-and-ai-assisted-development`](docs/architecture.md#8-engineering-decisions-trade-offs-and-ai-assisted-development) |
 | **#10**| **Engineering Investment & Velocity Breakdown** | Detailed accounting of ~43.5 engineering hours invested across architecture, streaming pipeline, security, and verification. | [See Section Below](#-engineering-investment--development-breakdown) |
+| **#11**| **Deep-Dive Audio Overview** | Deep-dive audio overview discussing the system architecture, sub-50ms streaming pipeline, and design decisions. | [`docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a`](docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a) |
+| **#12**| **Deep-Dive Video Overview** | Video overview explaining the architecture, streaming pipeline, and technical capabilities. | [`docs/video/DroidCanvas__Sub-50ms_Stream.mp4`](docs/video/DroidCanvas__Sub-50ms_Stream.mp4) |
+
 
 ---
 
