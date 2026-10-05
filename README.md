@@ -39,31 +39,9 @@ Engineered adhering strictly to **Clean Architecture**, **SOLID principles**, an
 | **#5** | **System Architecture Deep Dive** | Technical design of data flow, WebCodecs pipeline, scrcpy binary protocol, and rejected alternatives. | [`docs/architecture.md`](docs/architecture.md) |
 | **#6** | **Engineering Post-Mortem & Incident Analysis** | Engineering post-mortem detailing dead ends, kernel module incompatibilities, race conditions, and fixes. | [`docs/what-went-wrong.md`](docs/what-went-wrong.md) |
 | **#7** | **Enterprise Roadmap & Scaling Horizons** | Multi-node scaling roadmap (Kubernetes/KubeVirt, GPU passthrough, Web Audio API). | [`docs/with-more-time.md`](docs/with-more-time.md) |
-| **#8** | **Engineering Process Log & Audit Trail** | Prompt-by-prompt append-only audit trail recording development history and verification steps. | [`PROCESS_LOG.md`](PROCESS_LOG.md) |
-| **#9** | **Engineering Decisions & Trade-Offs** | Technical trade-off analysis, autonomous decisions, and AI pair-programming reflection. | [`docs/architecture.md#8-engineering-decisions-trade-offs-and-ai-assisted-development`](docs/architecture.md#8-engineering-decisions-trade-offs-and-ai-assisted-development) |
-| **#10**| **Engineering Investment & Velocity Breakdown** | Detailed accounting of ~43.5 engineering hours invested across architecture, streaming pipeline, security, and verification. | [See Section Below](#-engineering-investment--development-breakdown) |
-| **#11**| **Deep-Dive Audio Overview** | Deep-dive audio overview discussing the system architecture, sub-50ms streaming pipeline, and design decisions. | [`docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a`](docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a) |
-| **#12**| **Deep-Dive Video Overview** | Video overview explaining the architecture, streaming pipeline, and technical capabilities. | [`docs/video/DroidCanvas__Sub-50ms_Stream.mp4`](docs/video/DroidCanvas__Sub-50ms_Stream.mp4) |
+| **#8**| **Deep-Dive Audio Overview** | Deep-dive audio overview discussing the system architecture, sub-50ms streaming pipeline, and design decisions. | [`docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a`](docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a) |
+| **#9**| **Deep-Dive Video Overview** | Video overview explaining the architecture, streaming pipeline, and technical capabilities. | [`docs/video/DroidCanvas__Sub-50ms_Stream.mp4`](docs/video/DroidCanvas__Sub-50ms_Stream.mp4) |
 
-
----
-
-## ⏱️ Engineering Investment & Development Breakdown
-
-Total engineering effort invested into architecting, implementing, and verifying DroidCanvas: **~43.5 hours**.
-
-| Phase & Activity | Time Spent | Key Deliverables Produced |
-|:---|:---:|:---|
-| **1. Architecture Design & Research** | 4.0 hours | Industry research across scrcpy, WebCodecs, WebRTC, Redroid; authored `GO-BACKEND-BEST-PRACTICES.md` and `DESIGN.md`. |
-| **2. Scaffolding & Clean Architecture** | 3.5 hours | Go module layers (`domain`, `usecase`, `repository`, `api`, `infrastructure`), SQLite schema, React 18 + Vite setup. |
-| **3. Container Orchestration & Prewarmed Pool** | 5.5 hours | Docker client, port pool (5555–5557), prewarmed container pool (<300ms launch), idle reaper goroutine. |
-| **4. Streaming Pipeline & WebCodecs** | 7.0 hours | scrcpy v2.7 12B header parser, NAL demuxer, binary WebSocket relay, frontend WebCodecs `VideoDecoder` desynchronized canvas. |
-| **5. Input Forwarding & D-Pad & Typing** | 4.0 hours | Binary control serializers (touch 32B, scroll 21B, key 14B, text UTF-8), letterbox coordinate normalization, D-pad mode toggle. |
-| **6. Clipboard & Kiosk Mode** | 4.5 hours | Two-way bidirectional clipboard (`SET_CLIPBOARD` + `DEVICE_MSG_TYPE_CLIPBOARD`), 3-tier Kiosk defense (`kiosk_watchdog.go`). |
-| **7. Session Recording & In-Browser Playback** | 4.0 hours | FFmpeg stream copy to fragmented MP4 (`fMP4`), Range API, `RecordingPlayerModal.tsx` in-browser video playback. |
-| **8. Latency Profiling & Benchmark Harness** | 3.0 hours | Channel `0x03` microsecond ping/pong, Latency HUD overlay, Visual Loopback clapperboard benchmark script. |
-| **9. Code Review, Edge Case Hardening & Bug Fixes** | 4.0 hours | Resolved 14 code review findings (data races, memory bounds, Clean Architecture DIP, WebSocket unmount loops). |
-| **10. Cloud Deployment, Verification & Documentation** | 4.0 hours | `setup-vm.sh`, Caddy TLS reverse proxy, technical specifications, and walkthrough. |
 
 ---
 

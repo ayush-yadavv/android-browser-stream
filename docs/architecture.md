@@ -199,7 +199,7 @@ Browser input is captured on the HTML5 Canvas and serialized into scrcpy v2.7 bi
 - **100% Crash Resilience:**
   By utilizing Fragmented MP4 (`fMP4`) with `frag_keyframe+empty_moov+default_base_moof`, self-contained movie fragments (`moof` + `mdat`) are written at every keyframe. If the server or container halts abruptly, the resulting MP4 file remains completely valid and uncorrupted.
 - **In-Browser Playback & Range Seeking:**
-  Recordings are accessible via `GET /api/sessions/:id/recording`. The Gin controller supports RFC 7233 HTTP 206 Partial Content (Range requests), allowing the frontend `RecordingPlayerModal` to seek and stream smoothly without downloading the entire file. Evaluators can watch or download past recordings directly from the dashboard and session summary dialogs.
+  Recordings are accessible via `GET /api/sessions/:id/recording`. The Gin controller supports RFC 7233 HTTP 206 Partial Content (Range requests), allowing the frontend `RecordingPlayerModal` to seek and stream smoothly without downloading the entire file. Users can watch or download past recordings directly from the dashboard and session summary dialogs.
 
 ---
 
@@ -313,37 +313,4 @@ The frontend [`LatencyHud.tsx`](file:///mnt/Projects/android-browser-stream/fron
 
 ---
 
-## 8. Engineering Decisions, Trade-Offs, and AI-Assisted Development
 
-This project was built through an active pair-programming collaboration between the software engineer (Human) and Antigravity (AI). The following matrix summarizes key decisions made throughout the project:
-
-| Decision Domain | AI Proposal / Analysis | Human Guidance / Override | Final Resolution |
-|:---|:---|:---|:---|
-| **Streaming Transport** | Proposed WebRTC SFU vs WebCodecs over WebSocket. Detailed protocol complexity and latency characteristics. | Directed to prioritize sub-50ms glass-to-glass latency and minimal operational complexity. | Implemented WebCodecs over a single multiplexed binary WebSocket. |
-| **TDD & Architecture** | Outlined Clean Architecture with domain, usecase, repository, infrastructure separation. | Mandated strict TDD (Red-Green-Refactor) with uncached `-race` verification and integration tests first. | Enforced 100% uncached test suite pass before implementation advances. |
-| **Docker Daemon Discovery** | Go Docker SDK defaulted to `/var/run/docker.sock`, failing on Linux Docker Desktop. | Provided error logs: `Cannot connect to Docker daemon... Is docker running?` | AI diagnosed Docker Desktop user-space socket path (`~/.docker/desktop/docker.sock`) and implemented automatic socket discovery. |
-| **React Lifecycle Stability** | Investigated first-frame WebSocket disconnection loop. | Reported issue score 95 during code review: `DeviceCanvas & useWebSocket Disconnection & Container Destruction Loop`. | Isolated WebSocket lifecycle from parent re-renders by storing callback closures in `useRef`. |
-| **WebCodecs Parameter Sets** | Initially decoded frames sequentially; standalone SPS packets were dropped prior to IDR arrival. | Flagged decoder pipeline resets and profile mismatches. | AI created `h264.ts` parser to dynamically detect `avc1.PPCCLL` profile strings and cache SPS/PPS sets for keyframe prepending. |
-| **Input Forwarding & UX** | Proposed raw canvas pointer capture. | Emphasized necessity for mobile navigation controls and quick text injection. | Added on-screen navigation bar (Back, Home, AppSwitch, Volume) and text injection toolbar. |
-
-### 8.1 In My Own Words: Main Decisions Made That the AI Did Not Suggest
-1. **Adopting the Pre-Warmed Container Pool:**
-   While the AI initially suggested a purely reactive on-demand container launch for BR-2, Android OS cold boot takes ~25–40 seconds before `sys.boot_completed == 1`. I recognized that an end-user waiting 40 seconds on every connection would perceive the system as sluggish. I designed and directed the implementation of a configurable pre-warmed pool (`PREWARMED_POOL_SIZE`) that boots containers in the background and pre-stages the scrcpy server JAR. This reduced user connection time to < 300ms while remaining strictly single-machine and resource-bounded.
-2. **Rejecting Kubernetes in Favor of Single-Engine Docker:**
-   When the AI presented architectural scaling options involving Kubernetes/K3s, I rejected the suggestion based on our architectural scope constraint of keeping resource footprints minimal on single-node instances without unnecessary orchestration overhead (supporting 2 to 3 simultaneous instances on one machine). Single-node Docker avoids 1.5–3GB of control-plane RAM overhead on an 8GB cloud VM and eliminates brittle Binder IPC device passthrough issues.
-3. **Decoupling Stream Disconnection from Immediate Container Teardown:**
-   The AI's initial frontend implementation tied the WebSocket's `onClose` callback directly to the session `DELETE` endpoint. Whenever React re-rendered or StrictMode double-mounted, the socket closed and immediately destroyed the running container. I mandated decoupling the connection error display from container destruction, adding an explicit confirmation dialog and a 2-second grace period so transient network disconnects never prematurely kill active sessions.
-
-### 8.2 In My Own Words: Where the AI Was Wrong or Unhelpful and How It Was Discovered
-1. **The Docker Desktop LinuxKit Kernel Binder Failure (Exit Code 129):**
-   - *What the AI Did:* During local testing, the AI repeatedly attempted to restart Redroid containers and retry ADB connections, blaming cold boot timeouts.
-   - *How I Noticed:* I inspected `docker ps -a` and saw containers exiting immediately with `Exit 129`. I checked the host kernel modules and realized that while the Ubuntu host kernel had `binder_linux`, Docker Desktop for Linux runs inside a virtualized `LinuxKit` QEMU VM kernel (`6.12.76-linuxkit`), which completely lacks the Android binder IPC driver.
-   - *Resolution:* I overrode the AI's retry loop, stopped Docker Desktop, created `scripts/install-native-docker.sh` to install native Docker Engine directly on the host, mounted `/dev/binderfs` with symlinks (`/dev/binder`, `/dev/hwbinder`), and pointed the backend to native `/var/run/docker.sock`. Redroid booted immediately.
-2. **Missing WebCodecs SPS/PPS Parameter Sets on Dynamic Profiles:**
-   - *What the AI Did:* The AI wrote a WebCodecs decoder hook that assumed every keyframe arrived self-contained with parameter sets.
-   - *How I Noticed:* On certain device display configurations, scrcpy emitted standalone configuration packets (`isConfig: true`) prior to IDR frames. The browser threw `VideoDecoder: Invalid state: parameter sets missing` and dropped the stream into a permanent black canvas.
-   - *Resolution:* I identified the dropped config frames in the network inspector and directed the AI to build `frontend/src/lib/h264.ts` with a dedicated NAL parser that extracts the exact H.264 profile string (`avc1.PPCCLL`), caches the SPS/PPS parameter sets in memory, and dynamically prepends them to IDR slices.
-3. **TOCTOU Race Condition on Duplicate WebSocket Connections:**
-   - *What the AI Did:* The AI relied solely on checking `session.Status == streaming` in the SQLite database to prevent concurrent connections.
-   - *How I Noticed:* Because Android boot takes several seconds, two rapid `GET /stream` requests both passed the SQLite check while the session was still in `ready` state, resulting in dual scrcpy socket connection attempts that collided and terminated the session.
-   - *Resolution:* I directed the addition of an in-memory active stream mutex in `StreamController` to guarantee single-consumer locking at the HTTP upgrade boundary.

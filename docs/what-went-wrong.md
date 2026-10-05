@@ -8,7 +8,7 @@ This document details the critical failures, race conditions, memory leaks, and 
 
 ## 1. The First-Frame Disconnection & Container Destruction Loop
 
-### Severity: Critical (Score: 95)
+### Severity: Critical
 ### Symptoms:
 The streaming pipeline connected, negotiated scrcpy sockets, and began relaying video. However, the exact moment the very first video frame rendered on the browser canvas, the stream crashed, the WebSocket closed with code 1000/1006, and the backend instantly destroyed the Android container. A subsequent automatic reconnection attempt failed immediately with `HTTP 410 Gone`.
 
@@ -98,7 +98,7 @@ scrcpy sends video configuration in two modes:
 
 ## 4. SQLite Lock Contention in High-Frequency Activity Tracking
 
-### Severity: Medium (Identified during Code Review, Score: 80)
+### Severity: Medium
 ### Symptoms:
 Integration tests and concurrent streaming under `-race` showed database lock contention errors (`database is locked` / `busy`).
 
@@ -124,7 +124,7 @@ if now.Sub(w.lastUpdated) >= 5*time.Second {
 
 ## 5. scrcpy Port Forward & ADB Connection Leaks
 
-### Severity: Medium (Score: 75)
+### Severity: Medium
 ### Symptoms:
 Repeatedly creating and destroying sessions caused local ADB forward tables (`adb forward --list`) to grow indefinitely. Eventually, ADB rejected new forward rules with `cannot bind listener`.
 
@@ -142,7 +142,7 @@ When the session terminated, the container was stopped and removed, but the host
 
 ## 6. Unbounded Memory Allocation Guard in Video Packet Reader
 
-### Severity: Medium (Score: 70)
+### Severity: Medium
 ### Symptoms:
 Potential denial-of-service / memory exhaustion if scrcpy or a corrupt TCP stream returned a malformed packet size header.
 
@@ -167,7 +167,7 @@ Added unit test `TestReadVideoPacket_ExceedsMaxSize` verifying error handling.
 
 ## 7. WebCodecs Decoder Reconfiguration Race Condition
 
-### Severity: Medium (Score: 75)
+### Severity: Medium
 ### Symptoms:
 Occasionally, when dynamic codec profile extraction (`extractCodecProfile`) detected a profile switch from default baseline to high profile (`avc1.640028`), frames were dropped during the asynchronous reconfiguration promise.
 
@@ -181,7 +181,7 @@ Introduced `reconfiguringRef: Promise<void> | null` tracking in `useVideoDecoder
 
 ## 8. Async Microtask Decoder Configuration Race & Dropped IDR Keyframe
 
-### Severity: Critical (Score: 92)
+### Severity: Critical
 ### Symptoms:
 The streaming pipeline connected, negotiated scrcpy sockets, and began relaying video. The browser console logged `Detected stream codec profile: avc1.42801f, reconfiguring decoder`. However, no video ever appeared on the canvas (`stats.fps` remained 0), `hasFirstFrame` never became `true`, and user interaction stayed disabled.
 
@@ -226,7 +226,7 @@ By removing async microtasks, the decoder is synchronously in `'configured'` sta
 
 ## 9. Passive Event Listener Warning & Scrcpy Fixed-Point `i16fp` 2048 Scroll Encoding
 
-### Severity: Medium (Score: 80)
+### Severity: Medium
 ### Symptoms:
 1. Spinning the mouse wheel on the canvas caused browser console spam:
    `[Violation] Added non-passive event listener to a scroll-blocking 'wheel' event` and `Unable to preventDefault inside passive event listener invocation`.
@@ -255,7 +255,7 @@ Two distinct issues interacted:
 
 ## 10. LinuxKit Virtualized Kernel Binder IPC Absence in Docker Desktop (Signal 129)
 
-### Severity: Critical (Score: 94)
+### Severity: Critical
 ### Symptoms:
 When starting a session inside Docker Desktop on Linux, the Redroid container was created successfully, but exited within 500ms with `Exited (129)`. The UI remained stuck on "Booting Android...", and the backend hung in an ADB connect retry loop.
 
