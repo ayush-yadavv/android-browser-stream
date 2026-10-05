@@ -187,6 +187,17 @@ Building close to the metal inevitably exposes complex edge cases. Here are thre
 
 ---
 
+## Multimedia Deep Dives
+
+To see DroidCanvas in action or to listen to an architectural discussion on how we built the zero-transcode pipeline, check out our included multimedia resources:
+
+- 🎬 **Video Demonstration & Walkthrough:** Watch the system achieve sub-50ms latency in real-time.  
+  [Watch `DroidCanvas__Sub-50ms_Stream.mp4`](./video/DroidCanvas__Sub-50ms_Stream.mp4)
+- 🎧 **Audio Architectural Overview:** Listen to an in-depth discussion on our engineering trade-offs.  
+  [Listen to `Streaming_Android_to_Browsers_Under_50ms.m4a`](./audio/Streaming_Android_to_Browsers_Under_50ms.m4a)
+
+---
+
 ## Conclusion
 
 **DroidCanvas** proves that modern web browsers, armed with the WebCodecs API and binary WebSockets, are more than capable of replacing thick native clients for ultra-low-latency streaming tasks. By pairing this with ephemeral, kernel-sharing Android containers like Redroid and orchestrating it all through a resilient Go backend, developers can deliver near-bare-metal mobile experiences instantaneously via a simple URL.
