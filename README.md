@@ -2,14 +2,13 @@
 
 [![CI Backend](https://img.shields.io/badge/Go%20Backend-16%20Packages%20Passing%20(-race)-brightgreen?style=flat-square&logo=go)](https://go.dev/)
 [![CI Frontend](https://img.shields.io/badge/Frontend-62%20Tests%20Passing%20(9%20Suites)-brightgreen?style=flat-square&logo=vite)](https://vitejs.dev/)
-[![Live App](https://img.shields.io/badge/Live%20App-droidcanvas.ay7.me-blueviolet?style=flat-square&logo=caddy)](https://droidcanvas.ay7.me)
 [![Latency](https://img.shields.io/badge/Glass--to--Glass%20Latency-~35--48ms%20(p50)-blue?style=flat-square)](docs/architecture.md#7-latency-profiling--measurement-methodology-cr-3)
 [![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange?style=flat-square)](LICENSE)
 
 An ultra-low-latency, interactive Android-in-Cloud (AIC) streaming engine that executes ephemeral Android 13 containers and streams interactive H.264 video directly to modern web browsers via WebCodecs at sub-50ms glass-to-glass latency with zero server-side transcode overhead.
 
-> 🚀 **Live Production Deployment:** [**https://droidcanvas.ay7.me**](https://droidcanvas.ay7.me)  
-> 🎬 **Live Demo Video (YouTube):** [**https://youtu.be/rk-ZqgCHtfs**](https://youtu.be/rk-ZqgCHtfs)
+> 🚀 **Live Production Deployment:** `[TODO: Deploy to public VM and attach live URL]`  
+> 🎬 **Live Demo Video:** `[TODO: Record 3–5 min unedited walkthrough on live deployment and attach video URL]`
 
 Engineered adhering strictly to **Clean Architecture**, **SOLID principles**, and **Test-Driven Development (TDD)**.
 
@@ -33,14 +32,14 @@ Engineered adhering strictly to **Clean Architecture**, **SOLID principles**, an
 | # | Specification / Document | Description | Direct Link |
 |:---:|:---|:---|:---|
 | **#1** | **Repository & Source Code** | Modular Clean Architecture in Go & TypeScript (`android-browser-stream`). | [GitHub Root](.) |
-| **#2** | **Cloud Deployment Architecture & Live App** | Production deployment on Azure VM (`japancentral`) with Caddy Let's Encrypt TLS reverse proxy ([Deployment Guide](docs/deployment-guide.md)). | [Live App: `droidcanvas.ay7.me`](https://droidcanvas.ay7.me) |
-| **#3** | **Demo Video & System Walkthrough** | 3–5 minute unedited single-take narrated live demonstration ([Director's Script](docs/demo-video-guide.md)). | [YouTube (`rk-ZqgCHtfs`)](https://youtu.be/rk-ZqgCHtfs) |
+| **#2** | **Cloud Deployment Architecture & Live App** | Production deployment guide for Cloud VMs with Caddy Let's Encrypt TLS reverse proxy ([Deployment Guide](docs/deployment-guide.md)). | `[TODO: Deployed Link]` |
+| **#3** | **Demo Video & System Walkthrough** | 3–5 minute unedited single-take narrated live demonstration ([Offline Copy](docs/video/DroidCanvas__Sub-50ms_Stream.mp4)). | `[TODO: Live Demo Video]` |
 | **#4** | **Platform README** | Complete local setup, architecture summary, cloud hosting limits, and feature test guide. | This Document |
 | **#5** | **System Architecture Deep Dive** | Technical design of data flow, WebCodecs pipeline, scrcpy binary protocol, and rejected alternatives. | [`docs/architecture.md`](docs/architecture.md) |
 | **#6** | **Engineering Post-Mortem & Incident Analysis** | Engineering post-mortem detailing dead ends, kernel module incompatibilities, race conditions, and fixes. | [`docs/what-went-wrong.md`](docs/what-went-wrong.md) |
 | **#7** | **Enterprise Roadmap & Scaling Horizons** | Multi-node scaling roadmap (Kubernetes/KubeVirt, GPU passthrough, Web Audio API). | [`docs/with-more-time.md`](docs/with-more-time.md) |
-| **#8**| **Deep-Dive Audio Overview** | Deep-dive audio overview discussing the system architecture, sub-50ms streaming pipeline, and design decisions. | [`docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a`](docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a) |
-| **#9**| **Deep-Dive Video Overview** | Video overview explaining the architecture, streaming pipeline, and technical capabilities. | [`docs/video/DroidCanvas__Sub-50ms_Stream.mp4`](docs/video/DroidCanvas__Sub-50ms_Stream.mp4) |
+| **#8** | **Deep-Dive Audio Overview** | Deep-dive audio overview discussing the system architecture, sub-50ms streaming pipeline, and design decisions. | [`docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a`](docs/audio/Streaming_Android_to_Browsers_Under_50ms.m4a) |
+| **#9** | **Deep-Dive Video Overview** | Offline video overview explaining the architecture, streaming pipeline, and technical capabilities. | [`docs/video/DroidCanvas__Sub-50ms_Stream.mp4`](docs/video/DroidCanvas__Sub-50ms_Stream.mp4) |
 
 
 ---
@@ -131,7 +130,7 @@ Visit **`http://localhost:5173`** to access the DroidCanvas dashboard.
 
 ## 🌐 Cloud VM Deployment & Hosting Specifications
 
-- **Live Production URL:** [**https://droidcanvas.ay7.me**](https://droidcanvas.ay7.me) (Hosted on Microsoft Azure `japancentral`, `Standard_B2s_v2`, 8GB RAM with Let's Encrypt TLS & HTTP/3).
+- **Live Production URL:** `[TODO: Insert live public deployment URL]`
 - **Target OS:** Ubuntu 22.04 or 24.04 LTS (x86_64) with Linux kernel $\ge$ 5.15.
 - **Hardware Sizing:** Minimum 4 vCPUs, 8GB RAM, 40GB SSD.
 - **Kernel Requirement:** Android Binder IPC kernel module (`binder_linux` with `binderfs`).

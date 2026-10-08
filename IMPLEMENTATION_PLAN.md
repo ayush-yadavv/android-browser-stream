@@ -618,15 +618,16 @@ flowchart TD
 - [x] Production build clean: `npm run build` completed with zero TypeScript or Vite errors.
 - [x] Built automated DeskClock visual loopback latency benchmark script (`scripts/run_latency_benchmark.sh`).
 
-### Phase 7: Cloud Deployment & Final Deliverables Checklist (Completed)
+### Phase 7: Cloud Deployment & Final Deliverables Checklist
 - [x] Automated Cloud VM deployment script (`deploy/setup-vm.sh`) with BinderFS mounting, ffmpeg, Docker, Node.js, Go, and Caddy.
 - [x] Production systemd service unit (`deploy/droidcanvas.service`) and 1-command deployment runner (`deploy/deploy.sh`).
 - [x] Host network mode production Docker Compose stack (`deploy/docker-compose.prod.yml`) and Caddy auto-TLS reverse proxy (`deploy/Caddyfile`).
 - [x] Cloud VM operations and hosting guide across AWS, GCP, DO, and Hetzner (`docs/deployment-guide.md`).
 - [x] Automated remote deployment verification test suite (`scripts/verify_deployment.sh`).
 - [x] Standardized Visual Loopback benchmark harness (`scripts/run_latency_benchmark.sh`) with documented empirical numbers (<45ms).
-- [x] 3–5 minute unedited single-take narrated demo video director's guide and cue script (`docs/demo-video-guide.md`).
-- [x] Finalized all 10 mandatory deliverables with complete documentation and audit trails.
+- [ ] **[TODO]** Provision public Cloud VM instance and configure production domain & TLS certificates.
+- [ ] **[TODO]** Record 3–5 minute unedited single-take narrated demo video on live deployment and attach public link.
+- [x] Finalized all documentation, architectural write-ups, and audit trails.
 
 ---
 
@@ -635,8 +636,8 @@ flowchart TD
 | # | Deliverable | Target Location | Description & Acceptance Criteria |
 | :---: | :--- | :--- | :--- |
 | **1** | **Public Git Repository** | GitHub | Complete backend and frontend source code, automated scripts, clean commit history. |
-| **2** | **Deployed Public Link** | [`https://droidcanvas.ay7.me`](https://droidcanvas.ay7.me) | Live HTTPS/WSS URL accessible on Cloud VM without special client installation. |
-| **3** | **Narrated Demo Video** | [YouTube Video](https://youtu.be/rk-ZqgCHtfs) | 3–5 minutes, **one continuous take without cuts**, recorded on **live deployed Cloud VM** (no mock-ups), walking through each feature with voice narration. |
+| **2** | **Deployed Public Link** | `[TODO: Deployed Link]` | Live HTTPS/WSS URL accessible on Cloud VM without special client installation. |
+| **3** | **Narrated Demo Video** | `[TODO: Demo Video Link]` | 3–5 minutes, **one continuous take without cuts**, recorded on **live deployed Cloud VM** (no mock-ups), walking through each feature with voice narration. ([Offline Copy](docs/video/DroidCanvas__Sub-50ms_Stream.mp4)) |
 | **4** | **Project README.md** | `/README.md` | Single-command setup, architecture overview, hosting provider/region, server limits (max 3 concurrent sessions), and test instructions for each feature. |
 | **5** | **Architecture Write-Up** | `/docs/architecture.md` | 1–2 pages detailing data flow, protocol specifications, codec negotiation, and **a dedicated section on architectural alternatives considered and rejected**. |
 | **6** | **"What Went Wrong" Post-Mortem** | `/docs/what-went-wrong.md` | Analysis of technical hurdles (Docker Desktop LinuxKit kernel binder absence, binderfs mounting, WebSocket lifecycle races) and how they were solved. |

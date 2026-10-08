@@ -111,7 +111,7 @@ fi
 # 8. Deploy full stack via Docker Compose
 echo -e "[5/7] Deploying full application stack via docker-compose.prod.yml..."
 cd "${PROJECT_ROOT}"
-export DOMAIN="${DOMAIN:-droidcanvas.ay7.me}"
+export DOMAIN="${DOMAIN:-localhost}"
 export PREWARMED_POOL_SIZE="${PREWARMED_POOL_SIZE:-2}"
 cat <<EOF > "${PROJECT_ROOT}/.env"
 COMPOSE_FILE=deploy/docker-compose.prod.yml

@@ -1,6 +1,6 @@
 # Caddy configuration for Real-Time Android Browser Streaming
 # HTTPS only with automatic TLS and strict HSTS
-{$DOMAIN:droidcanvas.ay7.me} {
+{$DOMAIN:localhost} {
     root * /srv/frontend/dist
     file_server
 
